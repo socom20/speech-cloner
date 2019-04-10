@@ -24,7 +24,8 @@ class TIMIT:
 
         self.ds_norm          = cfg_d['ds_norm']
 
-        self.n_mfcc           = cfg_d['n_mfcc']
+        self.n_mfcc           = cfg_d['n_mfcc']         # Cantidad de mfcc en la salica 
+        self.n_timesteps      = cfg_d['n_timesteps']    # Cantidad de de pasos temporales para el muestreo  window_sampler
 
         
         if self.random_seed is not None:
@@ -421,8 +422,8 @@ class TIMIT:
 
 
 
-    def window_sampler(self, n_timesteps=400, batch_size=32, n_epochs=1, randomize_samples=True, ds_filters_d={'ds_type':'TRAIN'}):
-        
+    def window_sampler(self, batch_size=32, n_epochs=1, randomize_samples=True, ds_filters_d={'ds_type':'TRAIN'}):
+        n_timesteps=self.n_timesteps 
         f_s = self.get_ds_filter(**ds_filters_d)
         samples_v = np.arange(f_s.shape[0])[f_s]
         samples_v = [str(i) for i in samples_v]
@@ -440,9 +441,13 @@ class TIMIT:
 ##                    print('sample', i_sample)
 ##                    print(input_mfcc.shape, target_phn.shape)
 
+                    spec_len = ds_h5py['input_mfcc'][i_sample].shape[0]
+                    if spec_len <= n_timesteps:
+                        continue
+                    
                     # Solamente elegimos un frame por wav
                     # TODO: llevar la cuenta de los frames elegidos como i_sample asi siempre elegimos uno distinto
-                    i_s = np.random.randint(0, ds_h5py['input_mfcc'][i_sample].shape[0]-n_timesteps)
+                    i_s = np.random.randint(0, spec_len-n_timesteps)
                     i_e = i_s + n_timesteps
                     
                     input_mfcc = ds_h5py['input_mfcc'][i_sample][i_s:i_e]
@@ -547,8 +552,11 @@ if __name__ == '__main__':
              'pre_emphasis':0.97,
              'hop_length': 40,
              'win_length':400,
+             'n_timesteps':800,
+             
              'n_mels':128,
              'n_mfcc':40,
+             
              'mfcc_normaleze_first_mfcc':True,
              'mfcc_norm_factor':0.01,
              'mean_abs_amp_norm':0.003,
@@ -557,7 +565,14 @@ if __name__ == '__main__':
 
 
     timit = TIMIT(cfg_d)
+
     
+    mfcc_batch, phn_v_batch = next(iter(timit.window_sampler(32,1)))
+    for mfcc, phn_v in zip(mfcc_batch, phn_v_batch):
+        timit.spec_show(mfcc, phn_v)
+
+    
+
 ##    for i_sample in range(0, len(timit.ds['wav'])):
 ##        m = calc_MFCC_input(timit.ds['wav'][i_sample])
 ##        p = calc_PHN_target(timit.ds['wav'][i_sample], timit.ds['phn_v'][i_sample], timit.phn2ohv)
