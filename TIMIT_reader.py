@@ -87,7 +87,7 @@ class TIMIT:
             print(' - TIMIT, normalize_ds: Normalizando ondas con: add={:0.02f}  mult={:0.02f}'.format(*self.ds_norm))
             
         for i in range(len(self.ds['wav'])):
-            self.ds['wav'][i] = self.ds_norm[1] * (self.ds['wav'][i] - self.ds_norm[0])
+            self.ds['wav'][i] = self.ds_norm[1] * (self.ds['wav'][i] + self.ds_norm[0])
 
         return None
 
@@ -420,26 +420,75 @@ class TIMIT:
                             y_v = []
 
 
-    def spec_show(self, spec, phn_v=None, aspect_ratio=3, cmap=None):
 
-        m_repeat = np.repeat(m, m.shape[0] // m.shape[1] // int(aspect_ratio), axis=1).T
-                             
+    def window_sampler(self, n_timesteps=400, batch_size=32, n_epochs=1, randomize_samples=True, ds_filters_d={'ds_type':'TRAIN'}):
+        
+        f_s = self.get_ds_filter(**ds_filters_d)
+        samples_v = np.arange(f_s.shape[0])[f_s]
+        samples_v = [str(i) for i in samples_v]
+        
+
+        with h5py.File(os.path.join(self.ds_path, self.phn_mfcc_cache_name),'r') as ds_h5py:
+            x_v = []
+            y_v = []
+            
+            for i_epoch in range(n_epochs):
+                if randomize_samples:
+                    np.random.shuffle(samples_v)
+                
+                for i_sample in samples_v:
+##                    print('sample', i_sample)
+##                    print(input_mfcc.shape, target_phn.shape)
+
+                    # Solamente elegimos un frame por wav
+                    # TODO: llevar la cuenta de los frames elegidos como i_sample asi siempre elegimos uno distinto
+                    i_s = np.random.randint(0, ds_h5py['input_mfcc'][i_sample].shape[0]-n_timesteps)
+                    i_e = i_s + n_timesteps
+                    
+                    input_mfcc = ds_h5py['input_mfcc'][i_sample][i_s:i_e]
+                    target_phn = ds_h5py['target_phn'][i_sample][i_s:i_e]
+
+                    x_v.append( input_mfcc )
+                    y_v.append( target_phn )
+
+                    if len(x_v) == batch_size:
+                        x_v = np.array(x_v)
+                        y_v = np.array(y_v)
+                        
+                        assert x_v.shape[1] == y_v.shape[1] == n_timesteps
+                        
+                        yield x_v, y_v
+                        x_v = []
+                        y_v = []
+                            
+
+    def spec_show(self, spec, phn_v=None, aspect_ratio=3, cmap=None):
+        
+        m = spec
+
+        n_repeat = m.shape[0] // m.shape[1] // int(aspect_ratio)
+        if n_repeat > 1:
+            m_repeat = np.repeat(m, n_repeat, axis=1).T
+        else:
+            m_repeat = m.T
+        
         f, ax = plt.subplots(1,1, figsize=(aspect_ratio*5, 5))
         n = ax.imshow(m_repeat, cmap=cmap)
         cbar = f.colorbar(n)
 
         if phn_v is not None:
             last_i = 0
-            u = True
+            print_up = True
             for i in range(phn_v.shape[0]-1):
-                if (phn_v[i] != phn_v[i+1]).any():
-                    ax.plot([i, i], [0, m_repeat.shape[0]-1], 'y-')
+                if (phn_v[i] != phn_v[i+1]).any() or i == phn_v.shape[0]-2:
+                    if i != phn_v.shape[0]-2:
+                        ax.plot([i+1, i+1], [0, m_repeat.shape[0]-1], 'y-')
                     
-                    h = (0.85 if u else 0.95)*m_repeat.shape[0] 
+                    h = (0.85 if print_up else 0.95)*m_repeat.shape[0] 
 
                     ax.text(0.5*(i+last_i), h, self.idx2phn[np.argmax(phn_v[i])], horizontalalignment='center', color='r')
                     last_i = i
-                    u = not u
+                    print_up = not print_up
                     
         plt.show()
 
@@ -523,13 +572,13 @@ if __name__ == '__main__':
 ##        break
 
     
-    t0 = time.time()
-    n_batch=0
-    for mfcc, phn in timit.frame_sampler(batch_size=512, n_epochs=20, ds_filters_d={'ds_type':'TRAIN'}):
-        n_batch += 1
-##        print(mfcc.shape)
-##        print(phn.shape)
-    print(' Muestreo completo en {:0.02f} s, n_batches={}'.format(time.time() - t0, n_batch))
+##    t0 = time.time()
+##    n_batch=0
+##    for mfcc, phn in timit.frame_sampler(batch_size=512, n_epochs=20, ds_filters_d={'ds_type':'TRAIN'}):
+##        n_batch += 1
+####        print(mfcc.shape)
+####        print(phn.shape)
+##    print(' Muestreo completo en {:0.02f} s, n_batches={}'.format(time.time() - t0, n_batch))
 
         
 ##    for x, y in timit.phoneme_sampler():
