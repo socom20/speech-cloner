@@ -373,15 +373,16 @@ class TIMIT:
                         y_v = []
                         yield x_v_, y_v_
 
-    def get_ds_filter(self, **campo_valor):
+    def get_ds_filter(self, ds_filter={'ds_type':'TRAIN'}):
         f = np.ones(self.ds['wav'].shape[0], dtype=np.bool)
 
-        for c, v in campo_valor.items():
+        for c, v in ds_filter.items():
             if v is None:
                 continue
             
             if c not in self.ds.keys():
                 raise Exception(' - ERROR, get_ds_fillter: campo "{}" no encontrado en el ds'.format(c))
+            
             f = (self.ds[c] == v) * f
 
         if f.sum() == 0:
@@ -390,9 +391,9 @@ class TIMIT:
         return f
 
     
-    def frame_sampler(self, batch_size=32, n_epochs=1, randomize_samples=True, ds_filters_d={'ds_type':'TRAIN'}):
+    def frame_sampler(self, batch_size=32, n_epochs=1, randomize_samples=True, ds_filter_d={'ds_type':'TRAIN'}):
         
-        f_s = self.get_ds_filter(**ds_filters_d)
+        f_s = self.get_ds_filter(ds_filter_d)
         samples_v = np.arange(f_s.shape[0])[f_s]
         samples_v = [str(i) for i in samples_v]
         
@@ -422,9 +423,9 @@ class TIMIT:
 
 
 
-    def window_sampler(self, batch_size=32, n_epochs=1, randomize_samples=True, ds_filters_d={'ds_type':'TRAIN'}):
+    def window_sampler(self, batch_size=32, n_epochs=1, randomize_samples=True, ds_filter_d={'ds_type':'TRAIN'}):
         n_timesteps=self.n_timesteps 
-        f_s = self.get_ds_filter(**ds_filters_d)
+        f_s = self.get_ds_filter(ds_filter_d)
         samples_v = np.arange(f_s.shape[0])[f_s]
         samples_v = [str(i) for i in samples_v]
         
@@ -500,8 +501,8 @@ class TIMIT:
         return None
 
     
-    def calc_class_weights(self, clip=(0,10), ds_filters_d={'ds_type':'TRAIN'}):
-        f_s = self.get_ds_filter(**ds_filters_d)
+    def calc_class_weights(self, clip=(0,10), ds_filter_d={'ds_type':'TRAIN'}):
+        f_s = self.get_ds_filter(ds_filter_d)
         samples_v = np.arange(f_s.shape[0])[f_s]
 
         samples_v = [str(i) for i in samples_v]
@@ -567,7 +568,7 @@ if __name__ == '__main__':
     timit = TIMIT(cfg_d)
 
     
-    mfcc_batch, phn_v_batch = next(iter(timit.window_sampler(32,1)))
+    mfcc_batch, phn_v_batch = next(iter(timit.window_sampler(5,1)))
     for mfcc, phn_v in zip(mfcc_batch, phn_v_batch):
         timit.spec_show(mfcc, phn_v)
 

@@ -37,8 +37,17 @@ class phn_classificator_model:
             os.mkdir(self.cfg_d['model_path'])
 
         return None
-        
-        
+
+    def load_model(self, file_name='./models_phn/phn_model_epoch=499.kmodel', load_entire_model=False):
+        if load_entire_model:
+            self.model = keras.models.load_model(file_name)
+        else:
+            self.model.load_weights('./models_phn/phn_model_epoch=427.kmodel')
+            
+        return None
+
+    
+    
 ##    def create_model(self, input_shape=(40,), n_output=61, n_hidden_v=[10,5,3], hidden_activation_type='relu', output_activation='softmax', opt_hp_d={'learning_rate':1e-3,'beta_1':0.9,'beta_2':0.999,'epsilon':1e-8,'decay':0.0}):
 ##        model = keras.models.Sequential()
 ##
@@ -80,7 +89,7 @@ class phn_classificator_model:
         model.add( keras.layers.InputLayer( input_shape=input_shape ) )
 
         for n_h in n_hidden_v:
-            model.add(keras.layers.Bidirectional(keras.layers.GRU(n_h, return_sequences=True), merge_mode='concat'))
+            model.add(keras.layers.Bidirectional(keras.layers.CuDNNGRU(n_h, return_sequences=True), merge_mode='concat'))
 
         
         model.add(keras.layers.TimeDistributed( keras.layers.Dense(n_output, activation='softmax') ))
@@ -105,24 +114,32 @@ class phn_classificator_model:
                                                      mode='auto',
                                                      period=1)
         
-        self.cfg_d['cw'], self.cfg_d['n_samples'] = self.ds.calc_class_weights()
+        
 
-        self.cfg_d['cw'] = None # Sin peso por clases!!!!!!!!!!!!!!!!!!!!!!!!
-        if not self.cfg_d['use_class_weight']:
+        if self.cfg_d['use_class_weight']:
+            self.cfg_d['cw'], self.cfg_d['n_samples_trn'] = self.ds.calc_class_weights( self.cfg_d['ds_trn_filter_d'] )
+        else:
+            self.cfg_d['n_samples_trn'] = self.ds.get_ds_filter( self.cfg_d['ds_trn_filter_d'] ).sum()
             self.cfg_d['cw'] = None
-            
 
-        sampler_trn = timit.window_sampler(batch_size=self.cfg_d['batch_size'],
-                                           n_epochs=999999,
-                                           randomize_samples=self.cfg_d['randomize_samples'],
-                                           ds_filters_d=self.cfg_d['ds_filters_d'])
+        sampler_trn = self.ds.window_sampler(batch_size=self.cfg_d['batch_size'],
+                                             n_epochs=999999,
+                                             randomize_samples=self.cfg_d['randomize_samples'],
+                                             ds_filter_d=self.cfg_d['ds_trn_filter_d'])
 
+
+        sampler_val = self.ds.window_sampler(batch_size=self.cfg_d['batch_size'],
+                                             n_epochs=999999,
+                                             randomize_samples=self.cfg_d['randomize_samples'],
+                                             ds_filter_d=self.cfg_d['ds_val_filter_d'])
+
+        
         print(' Empezando entrenamiento:')
-        print('  - n_samples:', self.cfg_d['n_samples'])
-        print('  - steps_per_epoch:', self.cfg_d['n_samples']//self.cfg_d['batch_size'])
+        print('  - n_samples:', self.cfg_d['n_samples_trn'])
+        print('  - steps_per_epoch:', self.cfg_d['n_samples_trn']//self.cfg_d['batch_size'])
         
         model.model.fit_generator(sampler_trn,
-                                  steps_per_epoch=math.ceil(self.cfg_d['n_samples']/self.cfg_d['batch_size']),
+                                  steps_per_epoch=math.ceil(self.cfg_d['n_samples_trn']/self.cfg_d['batch_size']),
                                   epochs=self.cfg_d['n_epochs'],
                                   verbose=1,
                                   callbacks=[tbCallBack, svCallBack],
@@ -144,7 +161,7 @@ class phn_classificator_model:
         return None
 
 
-    def predict(x):
+    def predict(self, x):
         y_ = self.model.predict(x, batch_size=1024, verbose=False)
         return y_
 
@@ -166,7 +183,7 @@ if __name__ == '__main__':
                 'use_all_phonemes':True,
                 'ds_norm':(0.0, 10.0),
                 'remake_samples_cache':False,
-                   'random_seed':0,
+                'random_seed':0,
                 'ds_cache_name':'timit_cache.pickle',
                 'phn_mfcc_cache_name':'phn_mfcc_cache.h5py',
                 'verbose':True,
@@ -195,14 +212,14 @@ if __name__ == '__main__':
                    'input_shape':(timit.n_timesteps, timit.n_mfcc),
                    'n_output':timit.n_phn,
                    'n_hidden_v':[15,5],
-                   'hidden_activation_type':'tanh',
-                   'output_activation':'softmax',
                    'opt_hp_d': {'lr':1e-3,'beta_1':0.9,'beta_2':0.999,'epsilon':1e-8,'decay':0.0},
                    'log_dir':'./Graph',
 
-                   'ds_filters_d':{'ds_type':'TRAIN'},
+                   'ds_trn_filter_d':{'ds_type':'TRAIN'},
+                   'ds_val_filter_d':{'ds_type':'TEST'},
+                   'ds_tst_filter_d':{'ds_type':'TEST'},
                    'randomize_samples':True,
-                   'use_class_weight':True,
+                   'use_class_weight':False,
                    'n_epochs': 1000,
                    'batch_size': 32}
 
