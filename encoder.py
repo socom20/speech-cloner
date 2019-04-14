@@ -17,6 +17,9 @@ class encoder_spec_phn:
         self.cfg_d = cfg_d
         self.ds    = ds
 
+        self.i_global_step = 0
+        self.i_epoch       = 0
+
         self.mode = mode
 
         # Creo Modelo
@@ -29,13 +32,15 @@ class encoder_spec_phn:
                            scope=self.cfg_d['model_name'],
                            reuse=None )
 
+        
         # Armo la funcion de costo
         self._make_loss(reuse=None)
+        
+        # Armo las metricas
+        self._make_metric(reuse=None)
 
         # Creo optimizador
-        self._create_optimizer(reuse=None)
-
-        
+        self._build_optimizer(reuse=None)
         
         # Inicio la sesion de tf
         self._create_tf_session()
@@ -70,16 +75,15 @@ class encoder_spec_phn:
         Returns:
           A collection of Hidden vectors. So-called memory. Has the shape of (N, T_x, E).
         '''
-
-        # Inputs para el modelo
-        self.inputs = tf.placeholder(tf.float32, (None,)+input_shape)# (N, T, E)
-        # Targets para el modelo
-        self.target = tf.placeholder(tf.float32, (None, n_output) )  # (N, T, O)
-
         
         embed_size  = input_shape[-1]
-        inputs = self.inputs
-        with tf.variable_scope(scope, reuse=reuse): 
+        with tf.variable_scope(scope, reuse=reuse):
+            # Inputs para el modelo
+            inputs = tf.placeholder(tf.float32, (None,)+input_shape, name='inputs')# (N, T, E)
+            
+            # Targets para el modelo
+            target = tf.placeholder(tf.float32, (None, input_shape[0], n_output), name='target' )  # (N, T, O)
+            
             # Encoder pre-net
             prenet_out = prenet(inputs, None, embed_size, dropout_rate, is_training, scope="prenet", reuse=None) # (N, T_x, E/2)
             
@@ -93,6 +97,10 @@ class encoder_spec_phn:
             y_pred_class = tf.to_int32(tf.argmax(y_logits, axis=-1), name='y_pred_class')  # (N, T)
 
 
+        # Hago que las variables sean parte del objeto modelo
+        self.inputs       = inputs
+        self.target       = target
+
         self.y_pred       = y_pred
         self.y_pred_class = y_pred_class
         self.y_logits     = y_logits
@@ -101,19 +109,30 @@ class encoder_spec_phn:
     
 
     def _make_loss(self, reuse=None):
-        with tf.variable_scope('loss',reuse=reuse):
-            self.loss = tf.reduce_mean( tf.nn.softmax_cross_entropy_with_logits_v2(labels=self.target,
-                                                                                   logits=self.y_logits), axis=-1)
-        tf.summary.scalar('{}/loss'.format(self.mode), self.loss)
+        with tf.variable_scope('loss', reuse=reuse):
+            self.loss = tf.reduce_mean( tf.nn.softmax_cross_entropy_with_logits_v2(labels=self.target, logits=self.y_logits), name='cross_entropy')
+            
+        tf.summary.scalar('metric/loss', self.loss)
         return None
 
-    def _create_optimizer(self, reuse=None):
+
+    def _make_metric(self, reuse=None):
+        with tf.variable_scope('metric', reuse=reuse):
+            self.acc = tf.reduce_mean( tf.metrics.accuracy(labels=tf.argmax(self.target, axis=-1),
+                                                           predictions=tf.argmax(self.y_pred, axis=-1), name='accuracy'))
+            
+        tf.summary.scalar('metric/acc', self.acc)
+        return None
+
+    
+    def _build_optimizer(self, reuse=None):
         with tf.variable_scope('opt',reuse=reuse):
             self.learning_rate       = tf.Variable(self.cfg_d['learning_rate'], trainable=False, dtype=tf.float32, name='learning_rate')
             self.learning_rate_start = tf.Variable(self.cfg_d['learning_rate'], trainable=False, dtype=tf.float32, name='learning_rate_start')
             self.learning_rate_decay = tf.Variable(self.cfg_d['decay'],         trainable=False, dtype=tf.float32, name='learning_rate_decay')
 
             self.global_step = tf.Variable(0, trainable=False, dtype=tf.int32, name='global_step')
+            self.i_epoch_tf  = tf.Variable(0, trainable=False, dtype=tf.int32, name='epoch')
             
             self.opt = tf.train.AdamOptimizer(learning_rate=self.learning_rate,
                                               beta1=self.cfg_d['beta1'],
@@ -125,14 +144,24 @@ class encoder_spec_phn:
             
             self.lr_decay_op = tf.assign(self.learning_rate, self.learning_rate_start / (1. + self.learning_rate_decay * tf.cast(self.global_step, tf.float32)))
 
-            tf.summary.scalar('{}/learning_rate'.format(self.mode), self.learning_rate)
+            self.i_epoch_inc_op = tf.assign(self.i_epoch_tf, self.i_epoch_tf + 1)
+                                            
+            tf.summary.scalar('learning_rate',       self.learning_rate)
+            tf.summary.scalar('global_step',          self.global_step)
+            tf.summary.scalar('i_epoch_tf',          self.i_epoch_tf)
+            tf.summary.scalar('learning_rate_decay', self.learning_rate_decay)
+            tf.summary.scalar('learning_rate_start', self.learning_rate_start)
+
+            
         return None
 
     
 
     def _initialize_variables(self):
-        self.init = tf.global_variables_initializer()
-        self.sess.run(self.init)
+        self.init_v = []
+        self.init_v.append( tf.global_variables_initializer() )
+        self.init_v.append( tf.local_variables_initializer() )
+        self.sess.run(self.init_v)
         return None
 
 
@@ -142,64 +171,128 @@ class encoder_spec_phn:
         self.summary_merged = tf.summary.merge_all()
         
         if self.mode == 'train':
-            self.train_writer = tf.summary.FileWriter(self.cfg_d['log_dir'] + '/train', self.sess.graph)
+            self.trn_writer = tf.summary.FileWriter(self.cfg_d['log_dir'] + '/trn', graph=self.sess.graph)
+            self.val_writer = tf.summary.FileWriter(self.cfg_d['log_dir'] + '/val')
+            
         elif self.mode == 'test':
-            self.test_writer = tf.summary.FileWriter(self.cfg_d['log_dir'] + '/test')
+            self.tst_writer = tf.summary.FileWriter(self.cfg_d['log_dir'] + '/tst')
+            
         else:
             raise Exception(' - ERROR, self.mode={} not implemented'.format(self.mode))
 
         return None
 
 
-    def save(self, save_path=None):
+    def save(self, save_path=None, i_checkpoint=None, verbose=True):
         if save_path is None:
-            save_path = self.cfg_d['model_path']+'model.ckpt'
+            save_path = '{}/{}'.format(self.cfg_d['model_path'], self.cfg_d['model_name'])
+
+        if i_checkpoint is None:
+            i_checkpoint = self.i_global_step
+
+        i_checkpoint = int(i_checkpoint)
+        if verbose:
+            print(' Saveing: "{}"'.format(save_path))
             
-        self.saver.save(self.sess, save_path)
+        self.saver.save(self.sess, save_path, i_checkpoint)
 
         return None
 
-    def restore(self, save_path=None):
+    def restore(self, save_path=None, i_checkpoint=None):
         if save_path is None:
-            save_path = self.cfg_d['model_path']+'model.ckpt'
+            if i_checkpoint is None:
+                save_path = '{}/{}'.format(self.cfg_d['model_path'], self.cfg_d['model_name'])
+            else:
+                save_path = '{}/{}-{}'.format(self.cfg_d['model_path'], self.cfg_d['model_name'], int(i_checkpoint))
+
+        try:
+            self.saver.restore(self.sess, save_path, )
+        except:
+            print(' Model not found: {}'.format(save_path), file=sys.stderr)
+            sys.exit(1)
+
             
-        self.saver.restore(self.sess, save_path)
         return None
 
 
     def exec_train_step(self, inputs, target):
         
-        loss, global_step, train_step, summary_merged = self.sess.run([self.loss, self.global_step, self.train_step, self.summary_merged], feed_dict={self.inputs:inputs, self.target:target})
+        loss, acc, global_step, train_step, summary_merged = self.sess.run([self.loss, self.acc, self.global_step, self.train_step, self.summary_merged], feed_dict={self.inputs:inputs, self.target:target})
 
-        self.train_writer.add_summary(summary_merged, train_step)
+        self.i_global_step = global_step
+        self.trn_writer.add_summary(summary_merged, self.i_global_step)
         
-        return (loss, global_step, train_step)
+        return (loss, acc, global_step, train_step)
 
+    
 
+    def exec_calc_metrics(self, inputs, target):
+
+        acc, loss, global_step, summary_merged = self.sess.run([self.acc, self.loss, self.global_step, self.summary_merged], feed_dict={self.inputs:inputs, self.target:target})
+
+        self.i_global_step = global_step
+        if self.mode == 'train':
+            self.val_writer.add_summary(summary_merged, self.i_global_step)
+            
+        elif self.mode == 'test':
+            self.tst_writer.add_summary(summary_merged,  self.i_global_step)
+            
+        else:
+            raise Exception(' - ERROR, self.mode={} not implemented'.format(self.mode))
+            
+        return acc, loss
+
+    
     def train(self):
         self.cfg_d['n_samples_trn'] = self.ds.get_ds_filter( self.cfg_d['ds_trn_filter_d'] ).sum()
-            
 
-        sampler_trn = self.ds.window_sampler(batch_size=self.cfg_d['batch_size'],
-                                             n_epochs=999999,
-                                             randomize_samples=self.cfg_d['randomize_samples'],
-                                             ds_filter_d=self.cfg_d['ds_trn_filter_d'])
+        self.cfg_d['n_steps_epoch_trn'] = self.cfg_d['n_samples_trn']//self.cfg_d['batch_size']
+
+        self.sampler_trn = self.ds.window_sampler(batch_size=self.cfg_d['batch_size'],
+                                                  n_epochs=99999999,
+                                                  randomize_samples=self.cfg_d['randomize_samples'],
+                                                  ds_filter_d=self.cfg_d['ds_trn_filter_d'])
 
 
-        sampler_val = self.ds.window_sampler(batch_size=self.cfg_d['batch_size'],
-                                             n_epochs=999999,
-                                             randomize_samples=self.cfg_d['randomize_samples'],
-                                             ds_filter_d=self.cfg_d['ds_val_filter_d'])
+        self.sampler_val = self.ds.window_sampler(batch_size=self.cfg_d['batch_size'],
+                                                  n_epochs=self.cfg_d['val_batch_size'],
+                                                  randomize_samples=self.cfg_d['randomize_samples'],
+                                                  ds_filter_d=self.cfg_d['ds_val_filter_d'])
+
+        self.iter_val  = iter(self.sampler_val)
         
+        print(' Starting Training ...')
+        print(' n_samples_trn:    ', self.cfg_d['n_samples_trn'])
+        print(' n_steps_epoch_trn:', self.cfg_d['n_steps_epoch_trn'])
+        print(' batch_size:       ', self.cfg_d['batch_size'])
+        print(' n_epochs:         ', self.cfg_d['n_epochs'])
+        input('Press --ENTER--')
+
         
+        self.i_epoch = self.sess.run( self.i_epoch_tf )
+        
+        for mfcc_trn, phn_v_trn in self.sampler_trn:
+            loss, acc, global_step, train_step = self.exec_train_step(mfcc_trn, phn_v_trn)
+                        
+            print(' - i_epoch={}   global_step={}   loss_trn={:6.3f}  acc_trn={:6.3f}'.format(self.i_epoch, global_step, loss, acc) )
 
-        print(' Startin Training ...')
-        self.i_epoch = 0
-        for mfcc, phn_v in sampler_trn:
-            loss, global_step, train_step = self.exec_train_step(mfcc, phn_v)
+            if (global_step/self.cfg_d['n_steps_epoch_trn']) % self.cfg_d['save_each_n_epochs'] == 0:
+                
+                print(' Saving, epoch={} ...'.format(self.i_epoch))
+                self.save()
+                mfcc_val, phn_v_val = next(self.iter_val)
+                acc_val, loss_val = self.exec_calc_metrics(mfcc_val, phn_v_val)
+                print(' - i_epoch={}   global_step={}   loss_val={:6.3f}  acc_val={:6.3f}'.format(self.i_epoch, int(global_step), loss_val, acc_val) )
 
-            print(' - {}: {}'.format(train_step, loss) )
-            
+
+            if global_step % self.cfg_d['n_steps_epoch_trn'] == 0:
+                _, self.i_epoch = self.sess.run( [self.i_epoch_inc_op, self.i_epoch_tf] )
+                
+                if self.i_epoch >= self.cfg_d['n_epochs']:
+                    break
+
+
+        print(' End of Training !!!')
         return None
         
 
@@ -236,11 +329,12 @@ if __name__ == '__main__':
 
 
 
-    timit = None #TIMIT(ds_cfg_d)
+    timit = TIMIT(ds_cfg_d)
+##    timit = None
 
     
-    model_cfg_d = {'model_name':'phn_model_epoch={epoch:03d}.kmodel',
-                   'model_path':'./models_phn',
+    model_cfg_d = {'model_name':'phn_model',
+                   
                    'input_shape':(ds_cfg_d['n_timesteps'], ds_cfg_d['n_mfcc']),
                    'n_output':61,
 
@@ -258,7 +352,7 @@ if __name__ == '__main__':
                    'decay':0.0,
 
                    
-                   'log_dir':'./Graph',
+                   
 
                    'ds_trn_filter_d':{'ds_type':'TRAIN'},
                    'ds_val_filter_d':{'ds_type':'TEST'},
@@ -266,7 +360,13 @@ if __name__ == '__main__':
                    'randomize_samples':True,
                    
                    'n_epochs': 1000,
-                   'batch_size': 32}
+                   'batch_size': 32,
+                   'val_batch_size': 128,
+                   'save_each_n_epochs':1,
+                   
+
+                   'log_dir':'./Graph',
+                   'model_path':'./models_phn'}
 
 
 
@@ -275,13 +375,15 @@ if __name__ == '__main__':
 
     np.random.seed(0)
 
-    x = np.random.random( (32,) + model_cfg_d['input_shape'] )
-    y = np.random.random( (32, model_cfg_d['n_output']) )
-    y[np.arange(y.shape[0]), np.argmax(y,axis=1)] = 1.0
+    x = np.random.random( (32, model_cfg_d['input_shape'][0], model_cfg_d['input_shape'][1]) )
+    y = np.random.random( (32, model_cfg_d['input_shape'][0], model_cfg_d['n_output']) )
+    for i in range(y.shape[0]):
+        y[i,np.arange(y[i].shape[0]), np.argmax(y[i], axis=-1)] = 1.0
+
     y[y != 1] = 0.0
                       
-    model = encoder_spec_phn(model_cfg_d, timit)
-    model.exec_train_step(x, y)
-##    model.train()
+    model = encoder_spec_phn(model_cfg_d, timit, 'train')
+##    model.exec_train_step(x, y)
+    model.train()
 
 
