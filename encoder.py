@@ -25,6 +25,7 @@ class encoder_spec_phn:
         # Creo Modelo
         self._build_model( input_shape=self.cfg_d['input_shape'],
                            n_output   =self.cfg_d['n_output'],
+                           embed_size=self.cfg_d['embed_size'],
                            encoder_num_banks=self.cfg_d['encoder_num_banks'],
                            num_highwaynet_blocks=self.cfg_d['num_highwaynet_blocks'],
                            dropout_rate=self.cfg_d['dropout_rate'],
@@ -64,7 +65,7 @@ class encoder_spec_phn:
 
 
         
-    def _build_model(self, input_shape=(800, 256), n_output=48, encoder_num_banks=16, num_highwaynet_blocks=4, dropout_rate=0.5, is_training=True, scope="model", use_CudnnGRU=False, reuse=None):
+    def _build_model(self, input_shape=(800, 256), n_output=48, embed_size=None, encoder_num_banks=16, num_highwaynet_blocks=4, dropout_rate=0.5, is_training=True, scope="model", use_CudnnGRU=False, reuse=None):
         '''
         Args:
           inputs: A 2d tensor with shape of [N, T_x, E], with dtype of int32. Encoder inputs.
@@ -76,8 +77,10 @@ class encoder_spec_phn:
         Returns:
           A collection of Hidden vectors. So-called memory. Has the shape of (N, T_x, E).
         '''
-        
-        embed_size  = input_shape[-1]
+
+        if embed_size is None:
+            embed_size  = input_shape[-1]
+            
         with tf.variable_scope(scope, reuse=reuse):
             # Inputs para el modelo
             inputs = tf.placeholder(tf.float32, (None,)+input_shape, name='inputs')# (N, T, E)
@@ -349,7 +352,7 @@ if __name__ == '__main__':
                    'input_shape':(ds_cfg_d['n_timesteps'], ds_cfg_d['n_mfcc']),
                    'n_output':61,
 
-                   'prenet_units':[256,128], # None (usa la cantidad n_mfcc)
+                   'embed_size':128, # None (usa la cantidad n_mfcc)
                    'encoder_num_banks':16,
                    'num_highwaynet_blocks':4,
                    'dropout_rate':0.5,
