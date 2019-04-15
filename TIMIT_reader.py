@@ -42,7 +42,7 @@ class TIMIT:
         self.ds_gender_v  = np.array(['M', 'F'])
         
         self.ds_phoneme_v = np.array(['b', 'd', 'g', 'p', 't', 'k', 'dx', 'q',      # Stops
-                                      'bcl','dcl','gcl','pcl','tcl','kcl',          # 
+                                      'bcl','dcl','gcl','pcl','tcl','kcl',          # Silences
                                       'jh', 'ch',                                   # Affricates
                                       's', 'sh', 'z', 'zh', 'f', 'th', 'v', 'dh',   # Fricatives
                                       'm', 'n', 'ng', 'em', 'en', 'eng', 'nx',      # Nasals
@@ -50,7 +50,24 @@ class TIMIT:
                                       'iy', 'ih', 'eh', 'ey', 'ae', 'aa', 'aw', 'ay', 'ah', 'ao', 'oy', 'ow', 'uh', 'uw', 'ux', 'er', 'ax', 'ix', 'axr', 'ax-h', # Vowels
                                       'pau', 'epi', 'h#'])                          # Others ('1', '2' no aparece en el ds)
                                       
-    
+
+        # Conversion to 39 sumbols:
+        # cite: Phoneme Recognition from the TIMIT database using Recurrent Error Propagation Networks
+        self.phn_61to39_v = [['p', 'p'],['t', 't'],['k', 'k'],['pcl', 'sil'],['tcl', 'sil'],['kcl', 'sil'],
+                             ['dx', 'dx'],['m', 'm'],['n', 'n'],['ng', 'ng'],['nx', 'n'],['s', 's'],['z', 'z'],
+                             ['ch', 'ch'],['th', 'th'],['f', 'f'],['l', 'l'],['r', 'r'],['y', 'y'],['pau', 'sil'],
+                             ['hh', 'hh'],['eh', 'eh'],['ao', 'aa'],['aa', 'aa'],['uw', 'uw'],['er', 'er'],
+                             ['ay', 'ay'],['ey', 'ey'],['aw', 'aw'],['ax', 'ah'],['ix', 'ih'],['b', 'b'],
+                             ['d', 'd'],['g', 'g'],['bcl', 'sil'],['dcl', 'sil'],['gcl', 'sil'],['q', ''],
+                             ['em', 'm'],['en', 'n'],['eng', 'ng'],['sh', 'sh'],['zh', 'sh'],['jh', 'jh'],
+                             ['dh', 'dh'],['v', 'v'],['el', 'l'],['w', 'w'],['h#','sil'],['epi', 'sil'],
+                             ['hv', 'hh'],['ih', 'ih'],['ae', 'ae'],['ah', 'ah'],['uh', 'uh'],['ux', 'uw'],
+                             ['oy', 'oy'],['iy', 'iy'],['ow', 'ow'],['axr', 'er'],['ax-h', 'ah']]
+
+        self.phn_61to39_d = dict(self.phn_61to39_v)
+        self.ds_phoneme_39_v = np.unique([p[i] for p in self.phn_61to39_v if p != ''])
+        
+
         self.ds_cache_name  = cfg_d['ds_cache_name']
         phn_mfcc_name_id = hashlib.md5('_'.join([str(cfg_d[k]) for k in ('use_all_phonemes','sample_rate','pre_emphasis', 'hop_length', 'win_length', 'n_mels','n_mfcc', 'mfcc_normaleze_first_mfcc', 'mfcc_norm_factor', 'mean_abs_amp_norm', 'clip_output')]).encode()).hexdigest()
 
