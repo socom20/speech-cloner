@@ -163,7 +163,7 @@ def conv1d_banks(inputs, K=16, embed_size=256, is_training=True, scope="conv1d_b
         outputs = bn(outputs, is_training=is_training, activation_fn=tf.nn.relu)
     return outputs # (N, T, embed_size//2*K)
 
-def gru(inputs, num_units=None, bidirection=False, scope="gru", reuse=None):
+def gru(inputs, num_units=None, bidirection=False, scope="gru", use_CudnnGRU=False, reuse=None):
     '''Applies a GRU.
     
     Args:
@@ -182,15 +182,25 @@ def gru(inputs, num_units=None, bidirection=False, scope="gru", reuse=None):
     with tf.variable_scope(scope, reuse=reuse):
         if num_units is None:
             num_units = inputs.get_shape().as_list[-1]
-            
-        cell = tf.contrib.rnn.GRUCell(num_units)  
-        if bidirection: 
-            cell_bw = tf.contrib.rnn.GRUCell(num_units)
-            outputs, _ = tf.nn.bidirectional_dynamic_rnn(cell, cell_bw, inputs, dtype=tf.float32)
-            return tf.concat(outputs, 2)  
-        else:
-            outputs, _ = tf.nn.dynamic_rnn(cell, inputs, dtype=tf.float32)
+
+        if use_CudnnGRU:
+            if bidirection:
+                outputs, _ = tf.contrib.cudnn_rnn.CudnnGRU(1, num_units, direction='bidirectional')(inputs)
+            else:
+                outputs, _ = tf.contrib.cudnn_rnn.CudnnGRU(1, num_units, direction='unidirectional')(inputs)
+                
             return outputs
+            
+        else:
+            cell = tf.contrib.rnn.GRUCell(num_units)  
+            if bidirection: 
+                cell_bw = tf.contrib.rnn.GRUCell(num_units)
+                outputs, _ = tf.nn.bidirectional_dynamic_rnn(cell, cell_bw, inputs, dtype=tf.float32)
+                return tf.concat(outputs, 2)
+            else:
+                outputs, _ = tf.nn.dynamic_rnn(cell, inputs, dtype=tf.float32)
+                return outputs
+
 
 def attention_decoder(inputs, memory, num_units=None, scope="attention_decoder", reuse=None):
     '''Applies a GRU to `inputs`, while attending `memory`.
@@ -269,7 +279,7 @@ def highwaynet(inputs, num_units=None, scope="highwaynet", reuse=None):
 
 
 
-def CBHG(inputs, embed_size=256, encoder_num_banks=16, num_highwaynet_blocks=4, dropout_rate=0.5, is_training=True, scope="CBHG", reuse=None):
+def CBHG(inputs, embed_size=256, encoder_num_banks=16, num_highwaynet_blocks=4, dropout_rate=0.5, is_training=True, scope="CBHG", use_CudnnGRU=False, reuse=None):
 
 
     with tf.variable_scope(scope, reuse=reuse):
@@ -294,43 +304,33 @@ def CBHG(inputs, embed_size=256, encoder_num_banks=16, num_highwaynet_blocks=4, 
                                      scope='highwaynet_{}'.format(i)) # (N, T_x, E/2)
 
             ## Bidirectional GRU
-            output = gru(enc, num_units=embed_size//2, bidirection=True) # (N, T_x, E)
+            output = gru(enc, num_units=embed_size//2, bidirection=True, use_CudnnGRU=use_CudnnGRU) # (N, T_x, E)
 
     return output
 
 
-def model(inputs, embed_size=256, n_output=48, encoder_num_banks=16, num_highwaynet_blocks=4, dropout_rate=0.5, is_training=True, scope="model", reuse=None):
-    '''
-    Args:
-      inputs: A 2d tensor with shape of [N, T_x, E], with dtype of int32. Encoder inputs.
-      is_training: Whether or not the layer is in training mode.
-      scope: Optional scope for `variable_scope`
-      reuse: Boolean, whether to reuse the weights of a previous layer
-        by the same name.
-    
-    Returns:
-      A collection of Hidden vectors. So-called memory. Has the shape of (N, T_x, E).
-    '''
 
-    
-    with tf.variable_scope(scope, reuse=reuse): 
-        # Encoder pre-net
-        prenet_out = prenet(inputs, None, embed_size, dropout_rate, is_training, scope="prenet", reuse=None) # (N, T_x, E/2)
-        
-        # Encoder CBHG 
-        CBHG_out = CBHG(prenet_out, embed_size, encoder_num_banks, num_highwaynet_blocks, dropout_rate, is_training, scope="CBHG", reuse=None) # (N, T_x, E)
-
-
-        # Classificator
-        y_logits = tf.layers.dense(CBHG_out, n_output, activation=None, name="y_logits")  # (N, T, O)   tf.nn.relu
-        y_sm     = tf.nn.softmax(y_logits, name='y_sm')  # (N, T, O)
-        y_am     = tf.to_int32(tf.argmax(y_logits, axis=-1), name='y_am')  # (N, T)
-
-    return y_sm, y_am, y_logits
     
 
 
 if __name__ == '__main__':
+    def model(inputs, embed_size=256, n_output=48, encoder_num_banks=16, num_highwaynet_blocks=4, dropout_rate=0.5, is_training=True, scope="model", use_CudnnGRU=False, reuse=None):
+
+        
+        with tf.variable_scope(scope, reuse=reuse): 
+            # Encoder pre-net
+            prenet_out = prenet(inputs, None, embed_size, dropout_rate, is_training, scope="prenet", reuse=None) # (N, T_x, E/2)
+            
+            # Encoder CBHG 
+            CBHG_out = CBHG(prenet_out, embed_size, encoder_num_banks, num_highwaynet_blocks, dropout_rate, is_training, scope="CBHG", use_CudnnGRU=use_CudnnGRU, reuse=None) # (N, T_x, E)
+
+
+            # Classificator
+            y_logits = tf.layers.dense(CBHG_out, n_output, activation=None, name="y_logits")  # (N, T, O)   tf.nn.relu
+            y_sm     = tf.nn.softmax(y_logits, name='y_sm')  # (N, T, O)
+            y_am     = tf.to_int32(tf.argmax(y_logits, axis=-1), name='y_am')  # (N, T)
+
+        return y_sm, y_am, y_logits
     
     import numpy as np
     np.random.seed(0)

@@ -40,7 +40,7 @@ def calc_PHN_target(y, phn_v, phn_conv_d, hop_length=40, win_length=400):
 ##        if i_s > 2 and (target_v[-1] != target_v[-2]).any():
 ##            print(delta_phn_a, delta_phn_b)
             
-    target_v = np.array(target_v)
+    target_v = np.array(target_v, dtype=np.int32)
 ##    assert len(target_v) == n_samples, 'ERROR len(target_v) != n_samples, no se pudo hacer bien et target'
     
     return target_v
@@ -148,7 +148,7 @@ def calc_MFCC_input(y, sr=16000, pre_emphasis=0.97, hop_length=40, win_length=40
     if clip_output:
         MFCC = np.clip(MFCC, -1.0, 1.0)
     
-    return MFCC
+    return MFCC.astype(np.float32)
 
 
 

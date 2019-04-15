@@ -30,6 +30,7 @@ class encoder_spec_phn:
                            dropout_rate=self.cfg_d['dropout_rate'],
                            is_training=self.cfg_d['is_training'],
                            scope=self.cfg_d['model_name'],
+                           use_CudnnGRU=self.cfg_d['use_CudnnGRU'],
                            reuse=None )
 
         
@@ -63,7 +64,7 @@ class encoder_spec_phn:
 
 
         
-    def _build_model(self, input_shape=(800, 256), n_output=48, encoder_num_banks=16, num_highwaynet_blocks=4, dropout_rate=0.5, is_training=True, scope="model", reuse=None):
+    def _build_model(self, input_shape=(800, 256), n_output=48, encoder_num_banks=16, num_highwaynet_blocks=4, dropout_rate=0.5, is_training=True, scope="model", use_CudnnGRU=False, reuse=None):
         '''
         Args:
           inputs: A 2d tensor with shape of [N, T_x, E], with dtype of int32. Encoder inputs.
@@ -88,7 +89,7 @@ class encoder_spec_phn:
             prenet_out = prenet(inputs, None, embed_size, dropout_rate, is_training, scope="prenet", reuse=None) # (N, T_x, E/2)
             
             # Encoder CBHG 
-            CBHG_out = CBHG(prenet_out, embed_size, encoder_num_banks, num_highwaynet_blocks, dropout_rate, is_training, scope="CBHG", reuse=None) # (N, T_x, E)
+            CBHG_out = CBHG(prenet_out, embed_size, encoder_num_banks, num_highwaynet_blocks, dropout_rate, is_training, scope="CBHG", use_CudnnGRU=use_CudnnGRU, reuse=None) # (N, T_x, E)
 
 
             # Classificator
@@ -167,9 +168,9 @@ class encoder_spec_phn:
 
 
     def _create_saver(self):
-        self.saver = tf.train.Saver()
-        self.summary_merged = tf.summary.merge_all()
+        self.saver = tf.train.Saver(max_to_keep=9999, keep_checkpoint_every_n_hours=0.5)
         
+        self.summary_merged = tf.summary.merge_all()
         if self.mode == 'train':
             self.trn_writer = tf.summary.FileWriter(self.cfg_d['log_dir'] + '/trn', graph=self.sess.graph)
             self.val_writer = tf.summary.FileWriter(self.cfg_d['log_dir'] + '/val')
@@ -190,23 +191,24 @@ class encoder_spec_phn:
         if i_checkpoint is None:
             i_checkpoint = self.i_global_step
 
-        i_checkpoint = int(i_checkpoint)
+        self.saver.save(self.sess, save_path, int(i_checkpoint))
+
         if verbose:
-            print(' Saveing: "{}"'.format(save_path))
-            
-        self.saver.save(self.sess, save_path, i_checkpoint)
+            print(' Saved: "{}"'.format(self.saver.last_checkpoints[-1]))
 
         return None
+
 
     def restore(self, save_path=None, i_checkpoint=None):
         if save_path is None:
             if i_checkpoint is None:
-                save_path = '{}/{}'.format(self.cfg_d['model_path'], self.cfg_d['model_name'])
+                save_path = tf.train.latest_checkpoint(self.cfg_d['model_path'])
             else:
                 save_path = '{}/{}-{}'.format(self.cfg_d['model_path'], self.cfg_d['model_name'], int(i_checkpoint))
-
+            
         try:
-            self.saver.restore(self.sess, save_path, )
+            self.saver.restore(self.sess, save_path)
+            print('Restored: "{}"'.format(save_path))
         except:
             print(' Model not found: {}'.format(save_path), file=sys.stderr)
             sys.exit(1)
@@ -294,7 +296,18 @@ class encoder_spec_phn:
 
         print(' End of Training !!!')
         return None
+
+
+    def predict(self, x, batch_size=32):
+        y_pred_v = []
         
+        for i_s in range(0, x.shape[0], batch_size):
+            x_batch = x[i_s:min(i_s+batch_size, x.shape[0])]
+            y_pred = self.sess.run(self.y_pred, {self.inputs:x_batch} )
+            y_pred_v.append(y_pred)
+
+        return np.concatenate(y_pred_v, axis=0)
+                          
 
 if __name__ == '__main__':
     if os.name == 'nt':
@@ -308,7 +321,7 @@ if __name__ == '__main__':
                 'use_all_phonemes':True,
                 'ds_norm':(0.0, 10.0),
                 'remake_samples_cache':False,
-                'random_seed':0,
+                'random_seed':None,
                 'ds_cache_name':'timit_cache.pickle',
                 'phn_mfcc_cache_name':'phn_mfcc_cache.h5py',
                 'verbose':True,
@@ -316,9 +329,9 @@ if __name__ == '__main__':
                 'sample_rate':16000,
 
                 'pre_emphasis':0.97,
-                'hop_length': 40,
-                'win_length':400,
-                'n_timesteps':800,
+                'hop_length':    40,
+                'win_length':   400,
+                'n_timesteps':  800,
                 
                 'n_mels':128,
                 'n_mfcc':40,
@@ -329,8 +342,6 @@ if __name__ == '__main__':
 
 
 
-    timit = TIMIT(ds_cfg_d)
-##    timit = None
 
     
     model_cfg_d = {'model_name':'phn_model',
@@ -338,10 +349,12 @@ if __name__ == '__main__':
                    'input_shape':(ds_cfg_d['n_timesteps'], ds_cfg_d['n_mfcc']),
                    'n_output':61,
 
+                   'prenet_units':[256,128], # None (usa la cantidad n_mfcc)
                    'encoder_num_banks':16,
                    'num_highwaynet_blocks':4,
                    'dropout_rate':0.5,
                    'is_training':True,
+                   'use_CudnnGRU':True,
 
                    'model_name':'encoder',
 
@@ -351,19 +364,16 @@ if __name__ == '__main__':
                    'epsilon':1e-8,
                    'decay':0.0,
 
-                   
-                   
 
                    'ds_trn_filter_d':{'ds_type':'TRAIN'},
                    'ds_val_filter_d':{'ds_type':'TEST'},
                    'ds_tst_filter_d':{'ds_type':'TEST'},
                    'randomize_samples':True,
                    
-                   'n_epochs': 1000,
-                   'batch_size': 32,
+                   'n_epochs': 5000,
+                   'batch_size': 128,
                    'val_batch_size': 128,
-                   'save_each_n_epochs':1,
-                   
+                   'save_each_n_epochs':10,
 
                    'log_dir':'./Graph',
                    'model_path':'./models_phn'}
@@ -371,16 +381,18 @@ if __name__ == '__main__':
 
 
 
-    
+    if True:
+        timit = TIMIT(ds_cfg_d)
+    else:
+        timit = None
+        np.random.seed(0)
+        x = np.random.random( (32, model_cfg_d['input_shape'][0], model_cfg_d['input_shape'][1]) )
+        y = np.random.random( (32, model_cfg_d['input_shape'][0], model_cfg_d['n_output']) )
+        for i in range(y.shape[0]):
+            y[i,np.arange(y[i].shape[0]), np.argmax(y[i], axis=-1)] = 1.0
 
-    np.random.seed(0)
+        y[y != 1] = 0.0
 
-    x = np.random.random( (32, model_cfg_d['input_shape'][0], model_cfg_d['input_shape'][1]) )
-    y = np.random.random( (32, model_cfg_d['input_shape'][0], model_cfg_d['n_output']) )
-    for i in range(y.shape[0]):
-        y[i,np.arange(y[i].shape[0]), np.argmax(y[i], axis=-1)] = 1.0
-
-    y[y != 1] = 0.0
                       
     model = encoder_spec_phn(model_cfg_d, timit, 'train')
 ##    model.exec_train_step(x, y)
