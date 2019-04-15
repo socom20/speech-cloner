@@ -36,10 +36,10 @@ class encoder_spec_phn:
 
         
         # Armo la funcion de costo
-        self._make_loss(reuse=None)
+        self._build_loss(reuse=None)
         
         # Armo las metricas
-        self._make_metric(reuse=None)
+        self._build_metric(reuse=None)
 
         # Creo optimizador
         self._build_optimizer(reuse=None)
@@ -112,20 +112,31 @@ class encoder_spec_phn:
         return None
     
 
-    def _make_loss(self, reuse=None):
+    def _build_loss(self, reuse=None):
         with tf.variable_scope('loss', reuse=reuse):
-            self.loss = tf.reduce_mean( tf.nn.softmax_cross_entropy_with_logits_v2(labels=self.target, logits=self.y_logits), name='cross_entropy')
+            self.loss = tf.reduce_mean( tf.nn.softmax_cross_entropy_with_logits_v2(labels=self.target,
+                                                                                   logits=self.y_logits), name='cross_entropy')
             
         tf.summary.scalar('metric/loss', self.loss)
         return None
 
 
-    def _make_metric(self, reuse=None):
+    def _build_metric(self, reuse=None):
         with tf.variable_scope('metric', reuse=reuse):
-            self.acc = tf.reduce_mean( tf.metrics.accuracy(labels=tf.argmax(self.target, axis=-1),
-                                                           predictions=tf.argmax(self.y_pred, axis=-1), name='accuracy'))
+            labels      = tf.to_int32(tf.argmax(self.target, axis=-1), name='labels')      # dims  [N, T]
+            predictions = tf.to_int32(tf.argmax(self.y_pred, axis=-1), name='predictions') # dims  [N, T]
+
+            
+            self.acc = tf.reduce_mean( tf.metrics.accuracy(labels=labels, predictions=predictions, name='accuracy'))
+            self.mse = tf.reduce_mean( tf.metrics.mean_squared_error(labels=labels, predictions=predictions, name='mean_squared_error'))
+
+            num_classes = self.cfg_d['n_output']
+            self.batch_confusion     = tf.confusion_matrix(labels=tf.reshape(labels, [-1]), predictions=tf.reshape(predictions, [-1]), num_classes=num_classes, dtype=tf.float32, name='batch_confusion_matrix')
+            self.batch_confusion_img = tf.reshape(self.batch_confusion, [1, num_classes, num_classes, 1], name='batch_confusion_img')
             
         tf.summary.scalar('metric/acc', self.acc)
+        tf.summary.scalar('metric/mse', self.mse)
+        tf.summary.image('metric/batch_conf_img', self.batch_confusion_img)
         return None
 
     
@@ -221,31 +232,47 @@ class encoder_spec_phn:
 
 
     def exec_train_step(self, inputs, target):
+
+        ret = self.sess.run([self.loss,
+                             self.acc,
+                             self.mse,
+                             self.global_step,
+                             self.train_step,
+                             self.summary_merged], feed_dict={self.inputs:inputs, self.target:target})
         
-        loss, acc, global_step, train_step, summary_merged = self.sess.run([self.loss, self.acc, self.global_step, self.train_step, self.summary_merged], feed_dict={self.inputs:inputs, self.target:target})
+        loss, acc, mse, global_step, train_step, summary_merged = ret
 
         self.i_global_step = global_step
         self.trn_writer.add_summary(summary_merged, self.i_global_step)
         
-        return (loss, acc, global_step, train_step)
+        return (loss, acc, mse, global_step, train_step)
 
     
 
-    def exec_calc_metrics(self, inputs, target):
+    def exec_calc_metrics(self, inputs, target, summary_mode='validation'):
 
-        acc, loss, global_step, summary_merged = self.sess.run([self.acc, self.loss, self.global_step, self.summary_merged], feed_dict={self.inputs:inputs, self.target:target})
+        ret = self.sess.run([self.acc,
+                             self.mse,
+                             self.loss,
+                             self.batch_confusion_img,
+                             self.global_step,
+                             self.summary_merged], feed_dict={self.inputs:inputs, self.target:target})
+
+        
+        acc, mse, loss, batch_confusion_img, global_step, summary_merged = ret
+
 
         self.i_global_step = global_step
-        if self.mode == 'train':
+        if summary_mode == 'train':
             self.val_writer.add_summary(summary_merged, self.i_global_step)
-            
-        elif self.mode == 'test':
-            self.tst_writer.add_summary(summary_merged,  self.i_global_step)
-            
+        elif summary_mode == 'validation':
+            self.val_writer.add_summary(summary_merged,  self.i_global_step)
+        elif summary_mode == 'test':
+            self.tst_writer.add_summary(summary_merged,  self.i_global_step)            
         else:
-            raise Exception(' - ERROR, self.mode={} not implemented'.format(self.mode))
+            raise Exception(' - ERROR, summary_mode={} not implemented'.format(summary_mode))
             
-        return acc, loss
+        return acc, mse, loss
 
     
     def train(self):
@@ -277,17 +304,17 @@ class encoder_spec_phn:
         self.i_epoch = self.sess.run( self.i_epoch_tf )
         
         for mfcc_trn, phn_v_trn in self.sampler_trn:
-            loss, acc, global_step, train_step = self.exec_train_step(mfcc_trn, phn_v_trn)
+            loss, acc, mse, global_step, train_step = self.exec_train_step(mfcc_trn, phn_v_trn)
                         
-            print(' - i_epoch={}   global_step={}   loss_trn={:6.3f}  acc_trn={:6.3f}'.format(self.i_epoch, global_step, loss, acc) )
+            print(' - i_epoch={}   global_step={}   loss_trn={:6.3f}  acc_trn={:6.3f}  mse_trn={:6.3f}'.format(self.i_epoch, global_step, loss, acc, mse) )
 
             if (global_step/self.cfg_d['n_steps_epoch_trn']) % self.cfg_d['save_each_n_epochs'] == 0:
                 
                 print(' Saving, epoch={} ...'.format(self.i_epoch))
                 self.save()
                 mfcc_val, phn_v_val = next(self.iter_val)
-                acc_val, loss_val = self.exec_calc_metrics(mfcc_val, phn_v_val)
-                print(' - i_epoch={}   global_step={}   loss_val={:6.3f}  acc_val={:6.3f}'.format(self.i_epoch, int(global_step), loss_val, acc_val) )
+                acc_val, mse_val, loss_val = self.exec_calc_metrics(mfcc_val, phn_v_val)
+                print(' - i_epoch={}   global_step={}   loss_val={:6.3f}  acc_val={:6.3f}   mse_val={:6.3f}'.format(self.i_epoch, int(global_step), loss_val, acc_val, mse_val) )
 
 
             if global_step % self.cfg_d['n_steps_epoch_trn'] == 0:
@@ -311,6 +338,7 @@ class encoder_spec_phn:
 
         return np.concatenate(y_pred_v, axis=0)
                           
+
 
 if __name__ == '__main__':
     if os.name == 'nt':
@@ -352,12 +380,16 @@ if __name__ == '__main__':
                    'input_shape':(ds_cfg_d['n_timesteps'], ds_cfg_d['n_mfcc']),
                    'n_output':61,
 
+<<<<<<< HEAD
                    'embed_size':256, # None (usa la cantidad n_mfcc)
+=======
+                   'embed_size':80, # Para la prenet. Se puede aumentar la dimension. None (usa la cantidad n_mfcc)
+>>>>>>> a0aed42352b87788a090fa263dca9249a32c2c69
                    'encoder_num_banks':16,
                    'num_highwaynet_blocks':4,
                    'dropout_rate':0.5,
                    'is_training':True,
-                   'use_CudnnGRU':True,
+                   'use_CudnnGRU':sys.platform!='win32', # Solo cuda para linux
 
                    'model_name':'encoder',
 
