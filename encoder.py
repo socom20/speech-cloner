@@ -352,7 +352,7 @@ if __name__ == '__main__':
                    'input_shape':(ds_cfg_d['n_timesteps'], ds_cfg_d['n_mfcc']),
                    'n_output':61,
 
-                   'embed_size':128, # None (usa la cantidad n_mfcc)
+                   'embed_size':256, # None (usa la cantidad n_mfcc)
                    'encoder_num_banks':16,
                    'num_highwaynet_blocks':4,
                    'dropout_rate':0.5,
