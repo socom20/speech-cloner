@@ -15,10 +15,19 @@ class TIMIT:
     def __init__(self, cfg_d={}):
 
         self.cfg_d = cfg_d
+
+        if 'hop_length' not in self.cfg_d.keys():
+            self.cfg_d['hop_length'] = int(self.cfg_d['hop_length_ms'] * self.cfg_d['sample_rate'] / 1000.0)
+            print(" - cfg_d['hop_length'] = {:d}".format(self.cfg_d['hop_length']))
+
+        if 'win_length' not in self.cfg_d.keys():
+            self.cfg_d['win_length'] = int(self.cfg_d['win_length_ms'] * self.cfg_d['sample_rate'] / 1000.0)
+            print(" - cfg_d['win_length'] = {:d}".format(self.cfg_d['win_length']))
+
         
         self.ds_path          = cfg_d['ds_path']
         self.use_all_phonemes = cfg_d['use_all_phonemes']
-        
+
         self.random_seed      = cfg_d['random_seed']
         self.verbose          = cfg_d['verbose']
 
@@ -65,7 +74,7 @@ class TIMIT:
                              ['oy', 'oy'],['iy', 'iy'],['ow', 'ow'],['axr', 'er'],['ax-h', 'ah']]
 
         self.phn_61to39_d = dict(self.phn_61to39_v)
-        self.ds_phoneme_39_v = np.unique([p[i] for p in self.phn_61to39_v if p != ''])
+        self.ds_phoneme_39_v = np.unique([p[1] for p in self.phn_61to39_v if p != ''])
         
 
         self.ds_cache_name  = cfg_d['ds_cache_name']

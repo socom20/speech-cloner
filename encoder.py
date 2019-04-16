@@ -157,7 +157,7 @@ class encoder_spec_phn:
             self.train_step = self.opt.minimize(loss=self.loss,
                                                 global_step=self.global_step)
             
-            self.lr_decay_op = tf.assign(self.learning_rate, self.learning_rate_start / (1. + self.learning_rate_decay * tf.cast(self.global_step, tf.float32)))
+            self.lr_decay_op = tf.assign(self.learning_rate, self.learning_rate_start / (1. + self.learning_rate_decay * tf.cast(self.i_epoch_tf, tf.float32)))
 
             self.i_epoch_inc_op = tf.assign(self.i_epoch_tf, self.i_epoch_tf + 1)
                                             
@@ -232,7 +232,7 @@ class encoder_spec_phn:
 
 
     def exec_train_step(self, inputs, target):
-
+        
         ret = self.sess.run([self.loss,
                              self.acc,
                              self.mse,
@@ -300,8 +300,9 @@ class encoder_spec_phn:
         print(' n_epochs:         ', self.cfg_d['n_epochs'])
         input('Press --ENTER--')
 
-        
-        self.i_epoch = self.sess.run( self.i_epoch_tf )
+
+        # Refresh: i_epoch lr 
+        self.i_epoch, self.lr = self.sess.run( [self.i_epoch_tf, self.lr_decay_op] )
         
         for mfcc_trn, phn_v_trn in self.sampler_trn:
             loss, acc, mse, global_step, train_step = self.exec_train_step(mfcc_trn, phn_v_trn)
@@ -309,16 +310,18 @@ class encoder_spec_phn:
             print(' - i_epoch={}   global_step={}   loss_trn={:6.3f}  acc_trn={:6.3f}  mse_trn={:6.3f}'.format(self.i_epoch, global_step, loss, acc, mse) )
 
             if (global_step/self.cfg_d['n_steps_epoch_trn']) % self.cfg_d['save_each_n_epochs'] == 0:
-                
+                # new epoch
                 print(' Saving, epoch={} ...'.format(self.i_epoch))
                 self.save()
                 mfcc_val, phn_v_val = next(self.iter_val)
                 acc_val, mse_val, loss_val = self.exec_calc_metrics(mfcc_val, phn_v_val)
                 print(' - i_epoch={}   global_step={}   loss_val={:6.3f}  acc_val={:6.3f}   mse_val={:6.3f}'.format(self.i_epoch, int(global_step), loss_val, acc_val, mse_val) )
 
+                
+
 
             if global_step % self.cfg_d['n_steps_epoch_trn'] == 0:
-                _, self.i_epoch = self.sess.run( [self.i_epoch_inc_op, self.i_epoch_tf] )
+                _, self.i_epoch, self.lr = self.sess.run( [self.i_epoch_inc_op, self.i_epoch_tf, self.lr_decay_op] )
                 
                 if self.i_epoch >= self.cfg_d['n_epochs']:
                     break
@@ -357,21 +360,20 @@ if __name__ == '__main__':
                 'phn_mfcc_cache_name':'phn_mfcc_cache.h5py',
                 'verbose':True,
 
-                'sample_rate':16000,
+                'sample_rate':16000,  #Frecuencia de muestreo los archivos de audio Hz
 
-                'pre_emphasis':0.97,
-                'hop_length':    40,
-                'win_length':   400,
-                'n_timesteps':  800,
+                'pre_emphasis': 0.97,
+                
+                'hop_length_ms':   2.5, # 2.5ms = 40c
+                'win_length_ms':  25.0, # 25.0ms = 400c
+                'n_timesteps':   800, # 800ts= 2000ms  Cantidad de hop_length_ms en una ventana de prediccion.
                 
                 'n_mels':128,
                 'n_mfcc':40,
                 'mfcc_normaleze_first_mfcc':True,
-                'mfcc_norm_factor':0.01,
+                'mfcc_norm_factor': 0.01,
                 'mean_abs_amp_norm':0.003,
                 'clip_output':True}
-
-
 
 
     
@@ -379,25 +381,21 @@ if __name__ == '__main__':
                    
                    'input_shape':(ds_cfg_d['n_timesteps'], ds_cfg_d['n_mfcc']),
                    'n_output':61,
-
-<<<<<<< HEAD
-                   'embed_size':256, # None (usa la cantidad n_mfcc)
-=======
-                   'embed_size':80, # Para la prenet. Se puede aumentar la dimension. None (usa la cantidad n_mfcc)
->>>>>>> a0aed42352b87788a090fa263dca9249a32c2c69
-                   'encoder_num_banks':16,
+                   
+                   'embed_size':128, # Para la prenet. Se puede aumentar la dimension. None (usa la cantidad n_mfcc)
+                   'encoder_num_banks':8,
                    'num_highwaynet_blocks':4,
-                   'dropout_rate':0.5,
+                   'dropout_rate':0.2,
                    'is_training':True,
                    'use_CudnnGRU':sys.platform!='win32', # Solo cuda para linux
 
                    'model_name':'encoder',
 
-                   'learning_rate': 1e-3,
+                   'learning_rate':1.0e-2,
                    'beta1':0.9,
                    'beta2':0.999,
                    'epsilon':1e-8,
-                   'decay':0.0,
+                   'decay':1.0e-2,
 
 
                    'ds_trn_filter_d':{'ds_type':'TRAIN'},
