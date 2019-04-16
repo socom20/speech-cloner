@@ -5,7 +5,6 @@ import os, sys
 import librosa
 import librosa.display
 
-import sounddevice as sd
 import pickle
 
 
@@ -50,15 +49,20 @@ def calc_PHN_target(y, phn_v, phn_conv_d, hop_length=40, win_length=400):
 def calc_MFCC_input(y, sr=16000, pre_emphasis=0.97, hop_length=40, win_length=400, n_mels=128, n_mfcc=40, mfcc_normaleze_first_mfcc=True, mfcc_norm_factor=0.01, mean_abs_amp_norm=0.003, clip_output=True):
     """ Calcula MFCC de la onda de entrada para usarlo como input.
         A la señal de entrada y se le aplica primero un filtro de pre enfasis.
-        Posteriormente se calcula el espectroframa MFCC
+        Posteriormente se calcula el espectrograma MFCC
         
         y            : Señal de entrada
         sr           : Frecuencia de muestreo de la señal de entrada
         pre_emphasis : Parametro de pre enfasis. Si pre_emphasis==0.0, no se calucla este filtro.
-        hop_length : salto temperoal entre frames del espectro de salida
-        win_length : Ancho de la ventana usado para calcular la FFT
+        hop_length   : salto temperoal entre frames del espectro de salida
+        win_length   : Ancho de la ventana usado para calcular la FFT
         n_mels       : Cantidad de intervalos Mel utilizados para el calculo del espectrograma Mel
         n_mfcc       : Cantidad de intervalos para la DCT utilizados para el calculo del espectrograma MFCC
+        mfcc_normaleze_first_mfcc : Normaliza el primer coeficiente cepstral restando la componente cte inicial
+        mean_abs_amp_norm : escala la salida MFCC con este factor.
+        clip_output  : El MFCC de salida estará entre -1.0 y 1.0
+
+        return : MFCC con shape (n_steps, n_mfcc)
         """
 
     if mean_abs_amp_norm != 1.0:
@@ -79,11 +83,11 @@ def calc_MFCC_input(y, sr=16000, pre_emphasis=0.97, hop_length=40, win_length=40
 ##                          n_fft=n_fft,
 ##                          hop_length=hop_length,
 ##                          win_length=win_length,
-##                          window='hann', # Aplica filtro de Hamming antes de calcular la FFT
+##                          window='hann', # Aplica filtro de Hanning antes de calcular la FFT
 ##                          center=True,
 ##                          pad_mode='reflect')  # Salida shape = (1 + n_fft/2, t)
 ##
-##    # Calculamos el modulo
+##    # Dejamos solo el modulo de la STFT
 ##    F = np.abs(F)
 ##    
 ##    # Calculamos la potencia
@@ -143,7 +147,8 @@ def calc_MFCC_input(y, sr=16000, pre_emphasis=0.97, hop_length=40, win_length=40
     if mfcc_normaleze_first_mfcc:
         MFCC[:,0] -= MFCC[0,0]
 
-    MFCC = mfcc_norm_factor * MFCC
+    if mfcc_norm_factor != 1.0:
+        MFCC = mfcc_norm_factor * MFCC
 
     if clip_output:
         MFCC = np.clip(MFCC, -1.0, 1.0)
@@ -154,7 +159,9 @@ def calc_MFCC_input(y, sr=16000, pre_emphasis=0.97, hop_length=40, win_length=40
 
 
 if __name__ == '__main__':
-
+    
+    import sounddevice as sd
+    
     if os.name == 'nt':
         ds_path = r'G:\Downloads\timit'
     else:
