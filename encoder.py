@@ -385,9 +385,9 @@ if __name__ == '__main__':
                    'embed_size':128, # Para la prenet. Se puede aumentar la dimension. None (usa la cantidad n_mfcc)
                    'encoder_num_banks':8,
                    'num_highwaynet_blocks':4,
-                   'dropout_rate':0.2,
+                   'dropout_rate':0.5,
                    'is_training':True,
-                   'use_CudnnGRU':sys.platform!='win32', # Solo cuda para linux
+                   'use_CudnnGRU':False, #sys.platform!='win32', # Solo cuda para linux
 
                    'model_name':'encoder',
 
@@ -403,7 +403,7 @@ if __name__ == '__main__':
                    'ds_tst_filter_d':{'ds_type':'TEST'},
                    'randomize_samples':True,
                    
-                   'n_epochs': 5000,
+                   'n_epochs': 10000,
                    'batch_size': 128,
                    'val_batch_size': 128,
                    'save_each_n_epochs':10,
