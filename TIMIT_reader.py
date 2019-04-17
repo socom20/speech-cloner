@@ -350,7 +350,7 @@ class TIMIT:
         
         for i_s in range(len(timit.ds['wav'])):
             p = calc_PHN_target(self.ds['wav'][i_s], self.ds['phn_v'][i_s], self.phn2ohv)
-            m = calc_MFCC_input(self.ds['wav'][i_s])
+            m, _ = calc_MFCC_input(self.ds['wav'][i_s])
 
             input_v.append(m)
             target_v.append(p)
