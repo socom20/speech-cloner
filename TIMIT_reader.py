@@ -50,32 +50,42 @@ class TIMIT:
         self.ds_dialect_v = np.array(['DR'+str(i) for i in range(1,9)])
         self.ds_gender_v  = np.array(['M', 'F'])
         
-        self.ds_phoneme_v = np.array(['b', 'd', 'g', 'p', 't', 'k', 'dx', 'q',      # Stops
-                                      'bcl','dcl','gcl','pcl','tcl','kcl',          # Silences
-                                      'jh', 'ch',                                   # Affricates
-                                      's', 'sh', 'z', 'zh', 'f', 'th', 'v', 'dh',   # Fricatives
-                                      'm', 'n', 'ng', 'em', 'en', 'eng', 'nx',      # Nasals
-                                      'l', 'r', 'w', 'y', 'hh', 'hv', 'el',         # Semivowels and Glides
-                                      'iy', 'ih', 'eh', 'ey', 'ae', 'aa', 'aw', 'ay', 'ah', 'ao', 'oy', 'ow', 'uh', 'uw', 'ux', 'er', 'ax', 'ix', 'axr', 'ax-h', # Vowels
-                                      'pau', 'epi', 'h#'])                          # Others ('1', '2' no aparece en el ds)
+        self.ds_phoneme_61_v = np.array(['b', 'd', 'g', 'p', 't', 'k', 'dx', 'q',      # Stops
+                                         'bcl','dcl','gcl','pcl','tcl','kcl',          # Silences
+                                         'jh', 'ch',                                   # Affricates
+                                         's', 'sh', 'z', 'zh', 'f', 'th', 'v', 'dh',   # Fricatives
+                                         'm', 'n', 'ng', 'em', 'en', 'eng', 'nx',      # Nasals
+                                         'l', 'r', 'w', 'y', 'hh', 'hv', 'el',         # Semivowels and Glides
+                                         'iy', 'ih', 'eh', 'ey', 'ae', 'aa', 'aw', 'ay', 'ah', 'ao', 'oy', 'ow', 'uh', 'uw', 'ux', 'er', 'ax', 'ix', 'axr', 'ax-h', # Vowels
+                                         'pau', 'epi', 'h#'])                          # Others ('1', '2' no aparece en el ds)
                                       
 
-        # Conversion to 39 sumbols:
+        # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
+        # Conversion 61 to 39 phoneme simbols:
         # cite: Phoneme Recognition from the TIMIT database using Recurrent Error Propagation Networks
-        self.phn_61to39_v = [['p', 'p'],['t', 't'],['k', 'k'],['pcl', 'sil'],['tcl', 'sil'],['kcl', 'sil'],
-                             ['dx', 'dx'],['m', 'm'],['n', 'n'],['ng', 'ng'],['nx', 'n'],['s', 's'],['z', 'z'],
-                             ['ch', 'ch'],['th', 'th'],['f', 'f'],['l', 'l'],['r', 'r'],['y', 'y'],['pau', 'sil'],
-                             ['hh', 'hh'],['eh', 'eh'],['ao', 'aa'],['aa', 'aa'],['uw', 'uw'],['er', 'er'],
-                             ['ay', 'ay'],['ey', 'ey'],['aw', 'aw'],['ax', 'ah'],['ix', 'ih'],['b', 'b'],
-                             ['d', 'd'],['g', 'g'],['bcl', 'sil'],['dcl', 'sil'],['gcl', 'sil'],['q', ''],
-                             ['em', 'm'],['en', 'n'],['eng', 'ng'],['sh', 'sh'],['zh', 'sh'],['jh', 'jh'],
-                             ['dh', 'dh'],['v', 'v'],['el', 'l'],['w', 'w'],['h#','sil'],['epi', 'sil'],
-                             ['hv', 'hh'],['ih', 'ih'],['ae', 'ae'],['ah', 'ah'],['uh', 'uh'],['ux', 'uw'],
-                             ['oy', 'oy'],['iy', 'iy'],['ow', 'ow'],['axr', 'er'],['ax-h', 'ah']]
+        # The TIMIT symbol set with the CMU/MIT reduction and IPA symbols
+        self.phn_61to39_v = [['p',   'p'],[ 't',  't'],[ 'k',   'k'],['pcl','sil'],['tcl','sil'],['kcl','sil'],
+                             ['dx', 'dx'],[ 'm',  'm'],[ 'n',   'n'],[ 'ng', 'ng'],[ 'nx',  'n'],[  's',  's'],
+                             ['ch', 'ch'],['th', 'th'],[ 'f',   'f'],[  'l',  'l'],[  'r',  'r'],[  'y',  'y'],
+                             ['hh', 'hh'],['eh', 'eh'],[ 'ao', 'aa'],[ 'aa', 'aa'],[ 'uw', 'uw'],[ 'er', 'er'],
+                             ['ay', 'ay'],['ey', 'ey'],[ 'aw', 'aw'],[ 'ax', 'ah'],[ 'ix', 'ih'],[  'b',  'b'],
+                             [ 'd',  'd'],[ 'g',  'g'],['bcl','sil'],['dcl','sil'],['gcl','sil'],[  'z',  'z'],
+                             ['em',  'm'],['en',  'n'],['eng', 'ng'],[ 'sh', 'sh'],[ 'zh', 'sh'],[ 'jh', 'jh'],
+                             ['dh', 'dh'],[ 'v',  'v'],[ 'el',  'l'],[  'w',  'w'],[ 'h#','sil'],['epi','sil'],
+                             ['hv', 'hh'],['ih', 'ih'],[ 'ae', 'ae'],[ 'ah', 'ah'],[ 'uh', 'uh'],[ 'ux', 'uw'],
+                             ['oy', 'oy'],['iy', 'iy'],[ 'ow', 'ow'],['axr', 'er'],['ax-h','ah'],['pau','sil'], ['q', '']] # fonema 'q' no tiene representaci´on
 
         self.phn_61to39_d = dict(self.phn_61to39_v)
-        self.ds_phoneme_39_v = np.unique([p[1] for p in self.phn_61to39_v if p != ''])
-        
+        self.ds_phoneme_39_v = np.unique([p[1] for p in self.phn_61to39_v if p[1] != ''])
+
+        self.phn_61to39_conv_matix = np.zeros( (61, 39), dtype=np.int32)
+        for phn61, phn39 in self.phn_61to39_v:
+            if phn39 != '':
+                idx61 = np.argwhere(self.ds_phoneme_61_v==phn61)[0,0]
+                idx39 = np.argwhere(self.ds_phoneme_39_v==phn39)[0,0]
+
+                self.phn_61to39_conv_matix[idx61, idx39] = 1
+        # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
 
         self.ds_cache_name  = cfg_d['ds_cache_name']
         phn_mfcc_name_id = hashlib.md5('_'.join([str(cfg_d[k]) for k in ('use_all_phonemes','sample_rate','pre_emphasis', 'hop_length', 'win_length', 'n_mels','n_mfcc', 'mfcc_normaleze_first_mfcc', 'mfcc_norm_factor', 'mean_abs_amp_norm', 'clip_output')]).encode()).hexdigest()
@@ -100,10 +110,13 @@ class TIMIT:
         if not os.path.exists(os.path.join(self.ds_path, self.phn_mfcc_cache_name)):
             r = ''
             while not r in ['y', 'n']:
-                print('TIMIT, no se encontr´o el archivo de cache "{}", desea construirlo (y/n):'.format(self.phn_mfcc_cache_name), end='')
+                print(' - TIMIT, no se encontr´o el archivo de cache "{}", desea construirlo (y/n):'.format(self.phn_mfcc_cache_name), end='')
                 r = input()
             if r == 'y':
                 self.create_phn_mfcc_cache()
+            else:
+                print(' - TIMIT, no se puede continuar sin generar el archivo de cache.', file=sys.stderr)
+                sys.exit(1)
                 
         return None
 
@@ -202,7 +215,32 @@ class TIMIT:
             print(' - TIMIT, load_dataset_cache: OK !')
 
         return None
-        
+
+    def conv_61phn_to_39phn(self, phn61_v):
+        ret = (phn61_v@self.phn_61to39_conv_matix)
+
+        if ret.sum() != phn61_v.shape[0]:
+            ret_sum = ret.sum(axis=1)
+            i_q_v = np.argwhere(ret_sum==0).T[0]
+
+            for i_q in i_q_v:
+                for i_rep in range(i_q-1, -1, -1):
+                    if ret_sum[i_rep] != 0:
+                        ret[i_q] = ret[i_rep]
+                        break
+                else:
+                    for i_rep in range(i_q, ret_sum.axis[0], 1):
+                        if ret_sum[i_rep] != 0:
+                            ret[i_q] = ret[i_rep]
+                            break
+                    else:
+                        raise Exception(' ERROR: Replace for phoneme "p" not found!!')
+
+        assert ret.sum() == phn61_v.shape[0], Exception(' ERROR: phoneme not indexed!!')
+        return ret
+                
+
+            
     def read_dataset_from_disk(self, verbose=False):
         
         self.ds = {'wav':    [],  # Sound wave
@@ -329,15 +367,15 @@ class TIMIT:
         self.idx2phn = {} # Conversión de index a phonema_str
 
         if use_all_phonemes:
-            for idx, phn in enumerate(self.ds_phoneme_v):
-                ohv = np.zeros(len(self.ds_phoneme_v))
+            for idx, phn in enumerate(self.ds_phoneme_61_v):
+                ohv = np.zeros(len(self.ds_phoneme_61_v))
                 ohv[idx] = 1.0
 
                 self.phn2ohv[phn] = ohv
                 self.phn2idx[phn] = idx
                 self.idx2phn[idx] = phn
 
-            self.n_phn = len(self.ds_phoneme_v)
+            self.n_phn = len(self.ds_phoneme_61_v)
         else:
             raise Exception('TODO: Hacer que se agrupen phonemas similares para disminuri la cantidad de salidas del clasificador.')
         
@@ -348,7 +386,7 @@ class TIMIT:
         input_v  = []
         target_v = []
         
-        for i_s in range(len(timit.ds['wav'])):
+        for i_s in range(len(self.ds['wav'])):
             p = calc_PHN_target(self.ds['wav'][i_s], self.ds['phn_v'][i_s], self.phn2ohv)
             m = calc_MFCC_input(self.ds['wav'][i_s])
 

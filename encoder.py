@@ -128,7 +128,7 @@ class encoder_spec_phn:
 
             
             self.acc = tf.contrib.metrics.accuracy(labels=labels, predictions=predictions, name='accuracy')
-            self.mse = tf.losses.mean_squared_error(labels=labels, predictions=predictions, name='mean_squared_error')
+            self.mse = tf.reduce_mean( tf.squared_difference(self.y_pred, self.target),    name='mean_squared_error')
 
             num_classes = self.cfg_d['n_output']
             self.batch_confusion     = tf.confusion_matrix(labels=tf.reshape(labels, [-1]), predictions=tf.reshape(predictions, [-1]), num_classes=num_classes, dtype=tf.float32, name='batch_confusion_matrix')
@@ -409,7 +409,7 @@ if __name__ == '__main__':
                    'save_each_n_epochs':10,
 
                    'log_dir':'./stats_dir',
-                   'model_path':'./encode'}
+                   'model_path':'./encoder_ckpt'}
 
 
 
