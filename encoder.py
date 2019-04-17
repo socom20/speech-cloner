@@ -127,8 +127,8 @@ class encoder_spec_phn:
             predictions = tf.to_int32(tf.argmax(self.y_pred, axis=-1), name='predictions') # dims  [N, T]
 
             
-            self.acc = tf.reduce_mean( tf.metrics.accuracy(labels=labels, predictions=predictions, name='accuracy'))
-            self.mse = tf.reduce_mean( tf.metrics.mean_squared_error(labels=labels, predictions=predictions, name='mean_squared_error'))
+            self.acc = tf.contrib.metrics.accuracy(labels=labels, predictions=predictions, name='accuracy')
+            self.mse = tf.losses.mean_squared_error(labels=labels, predictions=predictions, name='mean_squared_error')
 
             num_classes = self.cfg_d['n_output']
             self.batch_confusion     = tf.confusion_matrix(labels=tf.reshape(labels, [-1]), predictions=tf.reshape(predictions, [-1]), num_classes=num_classes, dtype=tf.float32, name='batch_confusion_matrix')
@@ -403,13 +403,13 @@ if __name__ == '__main__':
                    'ds_tst_filter_d':{'ds_type':'TEST'},
                    'randomize_samples':True,
                    
-                   'n_epochs': 10000,
-                   'batch_size': 128,
-                   'val_batch_size': 128,
+                   'n_epochs':        5000,
+                   'batch_size':       128,
+                   'val_batch_size':   128,
                    'save_each_n_epochs':10,
 
-                   'log_dir':'./Graph',
-                   'model_path':'./models_phn'}
+                   'log_dir':'./stats_dir',
+                   'model_path':'./encode'}
 
 
 
