@@ -46,7 +46,21 @@ def calc_PHN_target(y, phn_v, phn_conv_d, hop_length=40, win_length=400):
 
 
         
-def calc_MFCC_input(y, sr=16000, pre_emphasis=0.97, hop_length=40, win_length=400, n_mels=128, n_mfcc=40, window='hann', mfcc_normaleze_first_mfcc=True, mfcc_norm_factor=0.01, calc_MFCC_derivate=False, P_dB_norm_factor=0.01, mean_abs_amp_norm=0.003, clip_output=True):
+def calc_MFCC_input(y,
+                    sr=16000,
+                    pre_emphasis=0.97,
+                    hop_length=40,
+                    win_length=400,
+                    n_mels=128,
+                    n_mfcc=40,
+                    window='hann',
+                    mfcc_normaleze_first_mfcc=True,
+                    mfcc_norm_factor=0.01,
+                    calc_MFCC_derivate=False,
+                    P_dB_norm_factor=0.01,
+                    mean_abs_amp_norm=0.003,
+                    clip_output=True):
+    
     """ Calcula MFCC de la onda de entrada para usarlo como input.
         A la señal de entrada y se le aplica primero un filtro de pre enfasis.
         Posteriormente se calcula el espectrograma MFCC

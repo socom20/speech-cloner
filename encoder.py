@@ -154,8 +154,12 @@ class encoder_spec_phn:
                                               beta2=self.cfg_d['beta2'],
                                               epsilon=self.cfg_d['epsilon'])
 
-            self.train_step = self.opt.minimize(loss=self.loss,
-                                                global_step=self.global_step)
+            
+            # https://www.tensorflow.org/api_docs/python/tf/contrib/layers/batch_norm
+            update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
+            with tf.control_dependencies(update_ops):
+                self.train_step = self.opt.minimize(loss=self.loss,
+                                                    global_step=self.global_step)
             
             self.lr_decay_op = tf.assign(self.learning_rate, self.learning_rate_start / (1. + self.learning_rate_decay * tf.cast(self.i_epoch_tf, tf.float32)))
 
@@ -340,8 +344,27 @@ class encoder_spec_phn:
             y_pred_v.append(y_pred)
 
         return np.concatenate(y_pred_v, axis=0)
-                          
 
+
+    def run(self, var, feed_dict={}):
+        return self.sess.run(var, feed_dict)
+
+    
+    def eval_acc(self, ds_iterator, n_batchs=100):
+        n_c = 0
+        n_t = 0
+        for i_batch in range(n_batchs):
+            mfcc_batch, phn_v_batch = next(ds_iterator)
+            y_pred = self.sess.run(self.y_pred, {self.inputs: mfcc_batch})
+            y_dec  = np.argmax( y_pred, axis=-1)
+            y_true = np.argmax( phn_v_batch, axis=-1)
+##            f = ( np.abs(mfcc_batch).sum(axis=-1) > np.finfo(np.float32).eps )
+            n_c += (y_dec == y_true).sum()
+            n_t += y_dec.size
+            acc = n_c/n_t
+            print('acc[{:4d}] = {:5.03f}'.format(int(n_t), acc))
+            
+        return acc, n_t
 
 if __name__ == '__main__':
     if os.name == 'nt':
@@ -364,14 +387,18 @@ if __name__ == '__main__':
 
                 'pre_emphasis': 0.97,
                 
-                'hop_length_ms':   2.5, # 2.5ms = 40c
-                'win_length_ms':  25.0, # 25.0ms = 400c
-                'n_timesteps':   800, # 800ts= 2000ms  Cantidad de hop_length_ms en una ventana de prediccion.
+                'hop_length_ms':   5.0, # 2.5ms = 40c | 5.0ms = 80c (@ 16kHz)
+                'win_length_ms':  25.0, # 25.0ms = 400c (@ 16kHz)
+                'n_timesteps':   400, # 800ts*(win_length_ms=2.5ms)= 2000ms  Cantidad de hop_length_ms en una ventana de prediccion.
                 
-                'n_mels':128,
+                'n_mels':80,
                 'n_mfcc':40,
+                'window':'hann',
                 'mfcc_normaleze_first_mfcc':True,
                 'mfcc_norm_factor': 0.01,
+                'calc_MFCC_derivate':False,
+                'P_dB_norm_factor':0.01,
+                
                 'mean_abs_amp_norm':0.003,
                 'clip_output':True}
 
@@ -385,26 +412,26 @@ if __name__ == '__main__':
                    'embed_size':128, # Para la prenet. Se puede aumentar la dimension. None (usa la cantidad n_mfcc)
                    'encoder_num_banks':8,
                    'num_highwaynet_blocks':4,
-                   'dropout_rate':0.5,
+                   'dropout_rate':0.2,
                    'is_training':True,
-                   'use_CudnnGRU':False, #sys.platform!='win32', # Solo cuda para linux
+                   'use_CudnnGRU':False, # sys.platform!='win32', # Solo cuda para linux
 
                    'model_name':'encoder',
 
-                   'learning_rate':1.0e-2,
+                   'learning_rate':5.0e-3,
+                   'decay':1.0e-2,
+                   
                    'beta1':0.9,
                    'beta2':0.999,
                    'epsilon':1e-8,
-                   'decay':1.0e-2,
-
-
+                   
                    'ds_trn_filter_d':{'ds_type':'TRAIN'},
                    'ds_val_filter_d':{'ds_type':'TEST'},
                    'ds_tst_filter_d':{'ds_type':'TEST'},
                    'randomize_samples':True,
                    
-                   'n_epochs':        5000,
-                   'batch_size':       128,
+                   'n_epochs':        99999,
+                   'batch_size':       32,
                    'val_batch_size':   128,
                    'save_each_n_epochs':10,
 

@@ -88,7 +88,20 @@ class TIMIT:
         # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
 
         self.ds_cache_name  = cfg_d['ds_cache_name']
-        phn_mfcc_name_id = hashlib.md5('_'.join([str(cfg_d[k]) for k in ('use_all_phonemes','sample_rate','pre_emphasis', 'hop_length', 'win_length', 'n_mels','n_mfcc', 'mfcc_normaleze_first_mfcc', 'mfcc_norm_factor', 'mean_abs_amp_norm', 'clip_output')]).encode()).hexdigest()
+        phn_mfcc_name_id = hashlib.md5('_'.join([str(cfg_d[k]) for k in ('use_all_phonemes',
+                                                                         'sample_rate',
+                                                                         'pre_emphasis',
+                                                                         'hop_length',
+                                                                         'win_length',
+                                                                         'n_mels',
+                                                                         'n_mfcc',
+                                                                         'window',
+                                                                         'mfcc_normaleze_first_mfcc',
+                                                                         'mfcc_norm_factor',
+                                                                         'calc_MFCC_derivate',
+                                                                         'P_dB_norm_factor',
+                                                                         'mean_abs_amp_norm',
+                                                                         'clip_output')]).encode()).hexdigest()
 
 
         
@@ -116,7 +129,7 @@ class TIMIT:
                 self.create_phn_mfcc_cache()
             else:
                 print(' - TIMIT, no se puede continuar sin generar el archivo de cache.', file=sys.stderr)
-                sys.exit(1)
+                return None
                 
         return None
 
@@ -159,17 +172,20 @@ class TIMIT:
                 y     = self.ds['wav'][i_sample]
                 phn_v = self.ds['phn_v'][i_sample]
                 
-                mfcc = calc_MFCC_input(y,
-                                       sr=cfg_d['sample_rate'],
-                                       pre_emphasis=cfg_d['pre_emphasis'],
-                                       hop_length=cfg_d['hop_length'],
-                                       win_length=cfg_d['win_length'],
-                                       n_mels=cfg_d['n_mels'],
-                                       n_mfcc=cfg_d['n_mfcc'],
-                                       mfcc_normaleze_first_mfcc=cfg_d['mfcc_normaleze_first_mfcc'],
-                                       mfcc_norm_factor=cfg_d['mfcc_norm_factor'],
-                                       mean_abs_amp_norm=cfg_d['mean_abs_amp_norm'],
-                                       clip_output=cfg_d['clip_output'])
+                mfcc, _ = calc_MFCC_input( y,
+                                           sr=cfg_d['sample_rate'],
+                                           pre_emphasis=cfg_d['pre_emphasis'],
+                                           hop_length=cfg_d['hop_length'],
+                                           win_length=cfg_d['win_length'],
+                                           n_mels=cfg_d['n_mels'],
+                                           n_mfcc=cfg_d['n_mfcc'],
+                                           window=cfg_d['window'],
+                                           mfcc_normaleze_first_mfcc=cfg_d['mfcc_normaleze_first_mfcc'],
+                                           mfcc_norm_factor=cfg_d['mfcc_norm_factor'],
+                                           calc_MFCC_derivate=cfg_d['calc_MFCC_derivate'],
+                                           P_dB_norm_factor=cfg_d['P_dB_norm_factor'],
+                                           mean_abs_amp_norm=cfg_d['mean_abs_amp_norm'],
+                                           clip_output=cfg_d['clip_output'])
 
                 phn  = calc_PHN_target(y, phn_v, phn_conv_d,
                                        hop_length=cfg_d['hop_length'],
@@ -382,23 +398,6 @@ class TIMIT:
         return None
 
 
-    def make_input_target(self):
-        input_v  = []
-        target_v = []
-        
-        for i_s in range(len(self.ds['wav'])):
-            p = calc_PHN_target(self.ds['wav'][i_s], self.ds['phn_v'][i_s], self.phn2ohv)
-            m, _ = calc_MFCC_input(self.ds['wav'][i_s])
-
-            input_v.append(m)
-            target_v.append(p)
-
-        self.ds['input_v']  = input_v
-        self.ds['target_v'] = target_v
-
-        return None
-    
-    
 
     def phoneme_sampler(self, ds_type='TRAIN', n_padd=3000, batch_size=32, n_epochs=1, one_phn_per_wav=True, randomize=True):
         if ds_type is not None:
@@ -487,7 +486,7 @@ class TIMIT:
 
 
 
-    def window_sampler(self, batch_size=32, n_epochs=1, randomize_samples=True, ds_filter_d={'ds_type':'TRAIN'}):
+    def window_sampler(self, batch_size=32, n_epochs=1, randomize_samples=True, ds_filter_d={'ds_type':'TRAIN'}, yield_idxs=False):
         n_timesteps=self.n_timesteps 
         f_s = self.get_ds_filter(ds_filter_d)
         samples_v = np.arange(f_s.shape[0])[f_s]
@@ -497,7 +496,8 @@ class TIMIT:
         with h5py.File(os.path.join(self.ds_path, self.phn_mfcc_cache_name),'r') as ds_h5py:
             x_v = []
             y_v = []
-            
+
+            idxs_v = []
             for i_epoch in range(n_epochs):
                 if randomize_samples:
                     np.random.shuffle(samples_v)
@@ -520,19 +520,25 @@ class TIMIT:
 
                     x_v.append( input_mfcc )
                     y_v.append( target_phn )
+                    idxs_v.append([i_s, i_e, int(i_sample)])
 
                     if len(x_v) == batch_size:
                         x_v = np.array(x_v)
                         y_v = np.array(y_v)
                         
                         assert x_v.shape[1] == y_v.shape[1] == n_timesteps
-                        
-                        yield x_v, y_v
+
+                        if yield_idxs:
+                            idxs_v = np.array(idxs_v)
+                            yield x_v, y_v, idxs_v
+                        else:
+                            yield x_v, y_v
                         x_v = []
                         y_v = []
+                        idxs_v = []
                             
 
-    def spec_show(self, spec, phn_v=None, aspect_ratio=3, cmap=None):
+    def spec_show(self, spec, phn_v=None, idxs_v=None, aspect_ratio=3, cmap=None):
         
         m = spec
 
@@ -559,7 +565,16 @@ class TIMIT:
                     ax.text(0.5*(i+last_i), h, self.idx2phn[np.argmax(phn_v[i])], horizontalalignment='center', color='r')
                     last_i = i
                     print_up = not print_up
-                    
+
+        if idxs_v is not None:
+            i_s, i_e, i_sample = idxs_v
+            step   = self.cfg_d['hop_length']
+            y_wave = self.ds['wav'][i_sample][step*i_s:step*i_e:step]
+            
+            h = m_repeat.shape[0]
+            y_wave_morm = 0.5* h * ((y_wave-y_wave.min())/(y_wave.max()-y_wave.min()) - 0.5) + h/2
+            plt.plot(y_wave_morm,  'b', alpha=0.5)
+        
         plt.show()
 
         return None
@@ -603,44 +618,49 @@ if __name__ == '__main__':
         ds_path = '/media/sergio/EVO970/UNIR/TFM/code/data_sets/TIMIT'
 
 
-    cfg_d = {'ds_path':ds_path,
-             'use_all_phonemes':True,
-             'ds_norm':(0.0, 10.0),
-             'remake_samples_cache':False,
-             'random_seed':0,
-             'ds_cache_name':'timit_cache.pickle',
-             'phn_mfcc_cache_name':'phn_mfcc_cache.h5py',
-             'verbose':True,
+    ds_cfg_d = {'ds_path':ds_path,
+                'use_all_phonemes':True,
+                'ds_norm':(0.0, 10.0),
+                'remake_samples_cache':False,
+                'random_seed':None,
+                'ds_cache_name':'timit_cache.pickle',
+                'phn_mfcc_cache_name':'phn_mfcc_cache.h5py',
+                'verbose':True,
 
-             'sample_rate':16000,
+                'sample_rate':16000,  #Frecuencia de muestreo los archivos de audio Hz
 
-             'pre_emphasis':0.97,
-             'hop_length': 40,
-             'win_length':400,
-             'n_timesteps':800,
-             
-             'n_mels':128,
-             'n_mfcc':40,
-             
-             'mfcc_normaleze_first_mfcc':True,
-             'mfcc_norm_factor':0.01,
-             'mean_abs_amp_norm':0.003,
-             'clip_output':True}
+                'pre_emphasis': 0.97,
+                
+                'hop_length_ms':   5.0, # 2.5ms = 40c | 5.0ms = 80c (@ 16kHz)
+                'win_length_ms':  25.0, # 25.0ms = 400c (@ 16kHz)
+                'n_timesteps':   400, # 800ts*(win_length_ms=2.5ms)= 2000ms  Cantidad de hop_length_ms en una ventana de prediccion.
+                
+                'n_mels':80,
+                'n_mfcc':40,
+                'window':'hann',
+                'mfcc_normaleze_first_mfcc':True,
+                'mfcc_norm_factor': 0.01,
+                'calc_MFCC_derivate':False,
+                'P_dB_norm_factor':0.01,
+                
+                'mean_abs_amp_norm':0.003,
+                'clip_output':True}
 
 
 
-    timit = TIMIT(cfg_d)
+    timit = TIMIT(ds_cfg_d)
 
     
-    mfcc_batch, phn_v_batch = next(iter(timit.window_sampler(5,1)))
-    for mfcc, phn_v in zip(mfcc_batch, phn_v_batch):
-        timit.spec_show(mfcc, phn_v)
+##    mfcc_batch, phn_v_batch, idxs_v_batch = next(iter(timit.window_sampler(50,1, yield_idxs=True)))
+##    for mfcc, phn_v, idxs_v in zip(mfcc_batch, phn_v_batch, idxs_v_batch):
+##        
+##        timit.spec_show(mfcc, phn_v, idxs_v)
 
     
 
 ##    for i_sample in range(0, len(timit.ds['wav'])):
-##        m = calc_MFCC_input(timit.ds['wav'][i_sample])
-##        p = calc_PHN_target(timit.ds['wav'][i_sample], timit.ds['phn_v'][i_sample], timit.phn2ohv)
+##        m, _ = calc_MFCC_input(timit.ds['wav'][i_sample])
+##        p    = calc_PHN_target(timit.ds['wav'][i_sample], timit.ds['phn_v'][i_sample], timit.phn2ohv)
 ##        
 ##
 ##        for a, b, p_str in timit.ds['phn_v'][i_sample]:
@@ -652,13 +672,13 @@ if __name__ == '__main__':
 ##        break
 
     
-##    t0 = time.time()
-##    n_batch=0
-##    for mfcc, phn in timit.frame_sampler(batch_size=512, n_epochs=20, ds_filters_d={'ds_type':'TRAIN'}):
-##        n_batch += 1
-####        print(mfcc.shape)
-####        print(phn.shape)
-##    print(' Muestreo completo en {:0.02f} s, n_batches={}'.format(time.time() - t0, n_batch))
+    t0 = time.time()
+    n_batch=0
+    for mfcc, phn in timit.window_sampler(batch_size=32, n_epochs=1, ds_filter_d={'ds_type':'TRAIN'}):
+        n_batch += 1
+##        print(mfcc.shape)
+##        print(phn.shape)
+    print(' Muestreo completo en {:0.02f} s, n_batches={}'.format(time.time() - t0, n_batch))
 
         
 ##    for x, y in timit.phoneme_sampler():
