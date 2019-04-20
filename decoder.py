@@ -291,7 +291,7 @@ class encoder_spec_phn:
 
 
         self.sampler_val = self.ds.window_sampler(batch_size=self.cfg_d['batch_size'],
-                                                  n_epochs=99999999,
+                                                  n_epochs=self.cfg_d['val_batch_size'],
                                                   randomize_samples=self.cfg_d['randomize_samples'],
                                                   ds_filter_d=self.cfg_d['ds_val_filter_d'])
 
@@ -395,29 +395,32 @@ if __name__ == '__main__':
                 'n_mfcc':40,
                 'window':'hann',
                 'mfcc_normaleze_first_mfcc':True,
-                'calc_mfcc_derivate':False,
-                
-                'mfcc_norm_factor':0.01,
-                'M_dB_norm_factor':0.01,
+                'mfcc_norm_factor': 0.01,
+                'calc_MFCC_derivate':False,
                 'P_dB_norm_factor':0.01,
-                
                 
                 'mean_abs_amp_norm':0.003,
                 'clip_output':True}
 
 
     
-    model_cfg_d = {'model_name':'phn_model',
+    model_cfg_d = {'model_name':'spec_model',
                    
-                   'input_shape':(ds_cfg_d['n_timesteps'], ds_cfg_d['n_mfcc']),
-                   'n_output':61,
+                   'input_shape':(ds_cfg_d['n_timesteps'], 61),
                    
-                   'embed_size':128, # Para la prenet. Se puede aumentar la dimension. None (usa la cantidad n_mfcc)
-                   'encoder_num_banks':8,
-                   'num_highwaynet_blocks':4,
-                   'dropout_rate':0.2,
-                   'is_training':True,
-                   'use_CudnnGRU':False, # sys.platform!='win32', # Solo cuda para linux
+                   'steps_v':[{'embed_size':128, # Para la prenet. Se puede aumentar la dimension. None (usa la cantidad n_mfcc)
+                               'encoder_num_banks':8,
+                               'num_highwaynet_blocks':4,
+                               'output_shape':(ds_cfg_d['n_timesteps'], ds_cfg_d['n_mfcc'])},
+                              
+                              {'embed_size':128, # Para la prenet. Se puede aumentar la dimension. None (usa la cantidad n_mfcc)
+                               'encoder_num_banks':8,
+                               'num_highwaynet_blocks':4,
+                               'output_shape':(ds_cfg_d['n_timesteps'], ds_cfg_d['n_mfcc'])}]
+                   
+                    'dropout_rate':0.2,
+                    'is_training':True,
+                    'use_CudnnGRU':False, # sys.platform!='win32', # Solo cuda para linux
 
                    'model_name':'encoder',
 

@@ -1,4 +1,6 @@
 import numpy as np
+from scipy import signal
+
 import matplotlib.pyplot as plt
 import os, sys
 
@@ -6,6 +8,44 @@ import librosa
 import librosa.display
 
 import pickle
+
+def calc_preemphasis(wav, coeff=0.97):
+    """
+    Emphasize high frequency range of the waveform by increasing power(squared amplitude).
+    Parameters
+    ----------
+    wav : np.ndarray [shape=(n,)]
+        Real-valued the waveform.
+    coeff: float <= 1 [scalar]
+        Coefficient of pre-emphasis.
+    Returns
+    -------
+    preem_wav : np.ndarray [shape=(n,)]
+        The pre-emphasized waveform.
+    """
+    
+    preem_wav = signal.lfilter([1, -coeff], [1], wav)
+    return preem_wav
+
+
+def calc_inv_preemphasis(preem_wav, coeff=0.97):
+    """
+    Invert the pre-emphasized waveform to the original waveform.
+    Parameters
+    ----------
+    preem_wav : np.ndarray [shape=(n,)]
+        The pre-emphasized waveform.
+    coeff: float <= 1 [scalar]
+        Coefficient of pre-emphasis.
+    Returns
+    -------
+    wav : np.ndarray [shape=(n,)]
+        Real-valued the waveform.
+    """
+    
+    wav = signal.lfilter([1], [1, -coeff], preem_wav)
+    return wav
+
 
 
 def calc_PHN_target(y, phn_v, phn_conv_d, hop_length=40, win_length=400):
@@ -56,7 +96,8 @@ def calc_MFCC_input(y,
                     window='hann',
                     mfcc_normaleze_first_mfcc=True,
                     mfcc_norm_factor=0.01,
-                    calc_MFCC_derivate=False,
+                    calc_mfcc_derivate=False,
+                    M_dB_norm_factor=0.01,
                     P_dB_norm_factor=0.01,
                     mean_abs_amp_norm=0.003,
                     clip_output=True):
@@ -84,7 +125,8 @@ def calc_MFCC_input(y,
         
     
     if pre_emphasis != 0.0:
-        y_preem = np.append(y[0], y[1:] - pre_emphasis * y[:-1])
+##        y_preem = np.append(y[0], y[1:] - pre_emphasis * y[:-1])
+        y_preem = calc_preemphasis(y, pre_emphasis)
     else:
         y_preem = y
 
@@ -103,6 +145,8 @@ def calc_MFCC_input(y,
 
     # Dejamos solo el modulo de la STFT
     F = np.abs(F)
+
+##    print(F)
     
     # Calculamos la potencia
     P = F ** 2 #/ n_fft
@@ -156,18 +200,16 @@ def calc_MFCC_input(y,
 
     
     # Traspongo para que el primer axis sea el tiempo
-    MFCC     = MFCC.T
+    MFCC      = MFCC.T
     M_spec    = M_spec.T
     M_spec_dB = M_spec_dB.T
-
     P    = P.T
     P_dB = P_dB.T
 
     # Returns:
     MFCC_ret = MFCC
+    M_dB_ret = M_spec_dB
     P_dB_ret = P_dB
-
-    
 
     
     
@@ -177,26 +219,86 @@ def calc_MFCC_input(y,
     if mfcc_norm_factor != 1.0:
         MFCC_ret = mfcc_norm_factor * MFCC_ret
 
-    if calc_MFCC_derivate:
+    if calc_mfcc_derivate:
         d_MFCC   = 2 * np.concatenate( [np.zeros((1, MFCC_ret.shape[1]),dtype=np.float32),MFCC_ret[2:]-MFCC_ret[:-2],np.zeros((1, MFCC_ret.shape[1]),dtype=np.float32)], axis=0)
         MFCC_ret = np.concatenate( [MFCC_ret, d_MFCC], axis=1)
 
     if P_dB_norm_factor != 1.0:
-        P_dB_ret = P_dB_norm_factor*(P_dB_ret - P_dB_ret.min())
+        P_dB_ret = P_dB_norm_factor*(P_dB_ret -  P_dB_ret.min())
         
-    if clip_output:
-        MFCC_ret = np.clip(MFCC_ret, -1.0, 1.0)
-        P_dB_ret = np.clip(P_dB_ret, -1.0, 1.0)
-    
-    return MFCC_ret.astype(np.float32), P_dB_ret.astype(np.float32)
 
+    if M_dB_norm_factor != 1.0:
+        M_dB_ret = M_dB_norm_factor*(M_dB_ret - M_dB_ret.min())
+            
+    if clip_output:
+        MFCC_ret      = np.clip(MFCC_ret, -1.0, 1.0)
+        P_dB_ret      = np.clip(P_dB_ret, -1.0, 1.0)
+        M_dB_ret = np.clip(M_dB_ret, -1.0, 1.0)
+
+        
+    
+    return MFCC_ret.astype(np.float32), M_dB_ret.astype(np.float32), P_dB_ret.astype(np.float32)
+
+
+
+
+def griffin_lim_alg(stft_amp, win_length, hop_length, num_iters=300, n_fft=None, verbose=True):
+
+    if n_fft is None:
+        n_fft = win_length
+
+
+    phase = np.pi * np.random.rand(*stft_amp.shape)
+    stft = stft_amp * np.exp(1.j * phase)
+    wav = None
+    last_wav = None
+    for i in range(num_iters):
+        wav = librosa.istft(stft, win_length=win_length, hop_length=hop_length)
+
+        if verbose and last_wav is not None:
+            mrse_delta = np.sqrt( np.mean(np.square(last_wav - wav)) )
+            print(' i={}  mrse_delta = {}'.format(i, mrse_delta))
+        
+        if i != num_iters - 1:
+            stft = librosa.stft(wav, n_fft=n_fft, win_length=win_length, hop_length=hop_length)
+            _, phase = librosa.magphase(stft)
+            phase = np.angle(phase)
+            stft = stft_amp * np.exp(1.j * phase)
+            
+        last_wav = wav
+        
+    return wav
+
+
+
+def from_power_to_wav(P,
+                      P_dB_norm_factor=0.01,
+                      pre_emphasis=0.97,
+                      hop_length=40,
+                      win_length=800,
+                      mean_abs_amp_norm=0.01,
+                      n_iter=200,
+                      verbose=True):
+
+
+    F = np.sqrt( librosa.core.db_to_power(P.T/P_dB_norm_factor - 80) )
+    y_pe_rec = griffin_lim_alg(F, win_length, hop_length, num_iters=n_iter, verbose=verbose)
+
+    if pre_emphasis != 0:
+        y_rec = calc_inv_preemphasis( y_pe_rec, pre_emphasis )
+    else:
+        y_rec = y_pe_rec
+        
+    y_rec = y_rec * (mean_abs_amp_norm / np.abs(y_rec).mean())
+    
+    return y_rec
 
 
 
 if __name__ == '__main__':
     
     import sounddevice as sd
-    
+
     if os.name == 'nt':
         ds_path = r'G:\Downloads\timit'
     else:
@@ -208,43 +310,62 @@ if __name__ == '__main__':
 ##    y, sr = librosa.load(ds_path + '/TRAIN/DR7/FLET0/SX277.WAV', 16000)
 
     
-    MFCC, P = calc_MFCC_input(y,
-                              sr=16000,
-                              pre_emphasis=0.97,
-                              hop_length=40,
-                              win_length=800,
-                              n_mels=128,
-                              n_mfcc=40,
-                              window='hamm',
-                              mfcc_normaleze_first_mfcc=True,
-                              mfcc_norm_factor=0.01,
-                              calc_MFCC_derivate=True,
+    MFCC, M, P = calc_MFCC_input(y,
+                                 sr=16000,
+                                 pre_emphasis=0.97,
+                                 hop_length=80,
+                                 win_length=400,
+                                 n_mels=80,
+                                 n_mfcc=40,
+                                 window='hamm',
+                                 mfcc_normaleze_first_mfcc=True,
+                                 mfcc_norm_factor=0.01,
+                                 calc_mfcc_derivate=False,
+                                 M_dB_norm_factor=0.01,
+                                 P_dB_norm_factor=0.01,
+                                 mean_abs_amp_norm=0.003,
+                                 clip_output=True)
+
+    y_rec = from_power_to_wav(P,
                               P_dB_norm_factor=0.01,
-                              mean_abs_amp_norm=0.003,
-                              clip_output=True)
-
-##    librosa.display.specshow(MFCC.T, sr=sr, x_axis='time', cmap='viridis')
-    plt.imshow(np.repeat(MFCC.T, 10, axis=0), cmap='viridis')
-
+                              pre_emphasis=0.97,
+                              hop_length=80,
+                              win_length=400,
+                              mean_abs_amp_norm=0.01,
+                              n_iter=200,
+                              verbose=True)
     
-    d_MFCC = np.concatenate( [np.zeros((1, MFCC.shape[1]),dtype=np.float32),MFCC[2:]-MFCC[:-2],np.zeros((1, MFCC.shape[1]),dtype=np.float32)], axis=0)
+    sd.play(y, 16000, blocking=True)
+    sd.play(y_rec, 16000, blocking=True)
     
-    plt.tight_layout()
-    plt.show()
-    for i in range(MFCC.shape[-1]):
-        _=plt.plot(MFCC[:,i])
-    else:
+    if 0:
+##        librosa.display.specshow(MFCC.T, sr=sr, x_axis='time', cmap='viridis')
+        plt.imshow(np.repeat(MFCC.T, 10, axis=0), cmap='viridis')
+        plt.tight_layout()
         plt.show()
+        for i in range(MFCC.shape[-1]):
+            _=plt.plot(MFCC[:,i])
+        else:
+            plt.show()
+
+    if 0:
+        plt.imshow(np.repeat(M.T, 10, axis=0), cmap='viridis')
+        plt.tight_layout()
+        plt.show()
+        for i in range(M.shape[-1]):
+            _=plt.plot(M[:,i])
+        else:
+            plt.show()    
         
-    
-##    plt.imshow(P.T, cmap='viridis')
-##    plt.tight_layout()
-##    plt.show()
-##
-##    for i in range(MFCC.shape[-1]):
-##        _=plt.plot(P[:,i])
-##    else:
-##        plt.show()
+    if 0:
+        plt.imshow(P.T, cmap='viridis')
+        plt.tight_layout()
+        plt.show()
+
+        for i in range(P.shape[-1]):
+            _=plt.plot(P[:,i])
+        else:
+            plt.show()
 
     
     

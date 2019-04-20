@@ -98,7 +98,8 @@ class TIMIT:
                                                                          'window',
                                                                          'mfcc_normaleze_first_mfcc',
                                                                          'mfcc_norm_factor',
-                                                                         'calc_MFCC_derivate',
+                                                                         'calc_mfcc_derivate',
+                                                                         'M_dB_norm_factor',
                                                                          'P_dB_norm_factor',
                                                                          'mean_abs_amp_norm',
                                                                          'clip_output')]).encode()).hexdigest()
@@ -172,20 +173,21 @@ class TIMIT:
                 y     = self.ds['wav'][i_sample]
                 phn_v = self.ds['phn_v'][i_sample]
                 
-                mfcc, _ = calc_MFCC_input( y,
-                                           sr=cfg_d['sample_rate'],
-                                           pre_emphasis=cfg_d['pre_emphasis'],
-                                           hop_length=cfg_d['hop_length'],
-                                           win_length=cfg_d['win_length'],
-                                           n_mels=cfg_d['n_mels'],
-                                           n_mfcc=cfg_d['n_mfcc'],
-                                           window=cfg_d['window'],
-                                           mfcc_normaleze_first_mfcc=cfg_d['mfcc_normaleze_first_mfcc'],
-                                           mfcc_norm_factor=cfg_d['mfcc_norm_factor'],
-                                           calc_MFCC_derivate=cfg_d['calc_MFCC_derivate'],
-                                           P_dB_norm_factor=cfg_d['P_dB_norm_factor'],
-                                           mean_abs_amp_norm=cfg_d['mean_abs_amp_norm'],
-                                           clip_output=cfg_d['clip_output'])
+                mfcc, _, _ = calc_MFCC_input(y,
+                                             sr=cfg_d['sample_rate'],
+                                             pre_emphasis=cfg_d['pre_emphasis'],
+                                             hop_length=cfg_d['hop_length'],
+                                             win_length=cfg_d['win_length'],
+                                             n_mels=cfg_d['n_mels'],
+                                             n_mfcc=cfg_d['n_mfcc'],
+                                             window=cfg_d['window'],
+                                             mfcc_normaleze_first_mfcc=cfg_d['mfcc_normaleze_first_mfcc'],
+                                             mfcc_norm_factor=cfg_d['mfcc_norm_factor'],
+                                             calc_mfcc_derivate=cfg_d['calc_mfcc_derivate'],
+                                             M_dB_norm_factor=cfg_d['M_dB_norm_factor'],
+                                             P_dB_norm_factor=cfg_d['P_dB_norm_factor'],
+                                             mean_abs_amp_norm=cfg_d['mean_abs_amp_norm'],
+                                             clip_output=cfg_d['clip_output'])
 
                 phn  = calc_PHN_target(y, phn_v, phn_conv_d,
                                        hop_length=cfg_d['hop_length'],
@@ -640,7 +642,8 @@ if __name__ == '__main__':
                 'window':'hann',
                 'mfcc_normaleze_first_mfcc':True,
                 'mfcc_norm_factor': 0.01,
-                'calc_MFCC_derivate':False,
+                'calc_mfcc_derivate':False,
+                'M_dB_norm_factor':0.01,
                 'P_dB_norm_factor':0.01,
                 
                 'mean_abs_amp_norm':0.003,
@@ -659,7 +662,7 @@ if __name__ == '__main__':
     
 
 ##    for i_sample in range(0, len(timit.ds['wav'])):
-##        m, _ = calc_MFCC_input(timit.ds['wav'][i_sample])
+##        m, _, _ = calc_MFCC_input(timit.ds['wav'][i_sample])
 ##        p    = calc_PHN_target(timit.ds['wav'][i_sample], timit.ds['phn_v'][i_sample], timit.phn2ohv)
 ##        
 ##
