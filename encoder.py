@@ -446,7 +446,7 @@ if __name__ == '__main__':
 
                    'model_name':'encoder',
 
-                   'learning_rate':5.0e-3,
+                   'learning_rate':1.0e-3,
                    'decay':1.0e-2,
                    
                    'beta1':0.9,

@@ -183,7 +183,7 @@ class decoder_specs:
 
     
     def _build_optimizer(self, reuse=None):
-        with tf.variable_scope('opt',reuse=reuse):
+        with tf.variable_scope('dec_opt',reuse=reuse):
             self.learning_rate       = tf.Variable(self.cfg_d['learning_rate'], trainable=False, dtype=tf.float32, name='learning_rate')
             self.learning_rate_start = tf.Variable(self.cfg_d['learning_rate'], trainable=False, dtype=tf.float32, name='learning_rate_start')
             self.learning_rate_decay = tf.Variable(self.cfg_d['decay'],         trainable=False, dtype=tf.float32, name='learning_rate_decay')
@@ -556,8 +556,8 @@ if __name__ == '__main__':
                   'is_training':True,
                   'use_CudnnGRU':False, # sys.platform!='win32', # Solo cuda para linux
 
-                 'learning_rate':5.0e-3,
-                 'decay':1.0e-2,
+                 'learning_rate':1.0e-4,
+                 'decay':0.0e-1,
                    
                  'beta1':0.9,
                  'beta2':0.999,
@@ -570,9 +570,9 @@ if __name__ == '__main__':
                  'randomize_samples':True,
                    
                  'n_epochs':        99999,
-                 'batch_size':       32,
-                 'val_batch_size':   128,
-                 'save_each_n_epochs':10,
+                 'batch_size':         32,
+                 'val_batch_size':    128,
+                 'save_each_n_epochs':  2,
 
                  'log_dir':   './dec_stats_dir',
                  'model_path':'./dec_ckpt'}
