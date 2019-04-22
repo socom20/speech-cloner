@@ -2,7 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import os, sys
 import math
-
+from collections import namedtuple
 
 import tensorflow as tf
 
@@ -13,20 +13,20 @@ from modules import prenet, CBHG
 
 
 class encoder_spec_phn:
-    def __init__(self, cfg_d={}, ds=None, mode='train', verbose=False):
+    def __init__(self, cfg_d={}, ds=None):
         self.cfg_d = cfg_d
         self.ds    = ds
 
         self.i_global_step = 0
         self.i_epoch       = 0
-
-        self.mode = mode
+        self.summary_v     = []
+        
 
         # Creo Modelo
         self._build_model( input_shape=self.cfg_d['input_shape'],
                            n_output   =self.cfg_d['n_output'],
                            embed_size=self.cfg_d['embed_size'],
-                           encoder_num_banks=self.cfg_d['encoder_num_banks'],
+                           num_conv_banks=self.cfg_d['num_conv_banks'],
                            num_highwaynet_blocks=self.cfg_d['num_highwaynet_blocks'],
                            dropout_rate=self.cfg_d['dropout_rate'],
                            is_training=self.cfg_d['is_training'],
@@ -35,21 +35,32 @@ class encoder_spec_phn:
                            reuse=None )
 
         
+
+        
         # Armo la funcion de costo
         self._build_loss(reuse=None)
-        
+
         # Armo las metricas
         self._build_metric(reuse=None)
 
-        # Creo optimizador
-        self._build_optimizer(reuse=None)
-        
+
+        if self.cfg_d['is_training']:
+            # Creo optimizador
+            self._build_optimizer(reuse=None)
+
+
         # Inicio la sesion de tf
         self._create_tf_session()
 
         # Creamos Saver (se crea el merge del summary)
         self._create_saver()
 
+        # Si no entrenamos retiramos todas las variables de la collection TRAINABLE_VARIABLES
+        if not self.cfg_d['is_training']:
+            for v in tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, self.cfg_d['model_name']):
+                tf.get_collection_ref(tf.GraphKeys.TRAINABLE_VARIABLES).remove(v)
+
+        
         # Inicializo las variables
         self._initialize_variables()
         
@@ -65,7 +76,7 @@ class encoder_spec_phn:
 
 
         
-    def _build_model(self, input_shape=(800, 256), n_output=48, embed_size=None, encoder_num_banks=16, num_highwaynet_blocks=4, dropout_rate=0.5, is_training=True, scope="model", use_CudnnGRU=False, reuse=None):
+    def _build_model(self, input_shape=(800, 256), n_output=48, embed_size=None, num_conv_banks=16, num_highwaynet_blocks=4, dropout_rate=0.5, is_training=True, scope="model", use_CudnnGRU=False, reuse=None):
         '''
         Args:
           inputs: A 2d tensor with shape of [N, T_x, E], with dtype of int32. Encoder inputs.
@@ -92,7 +103,7 @@ class encoder_spec_phn:
             prenet_out = prenet(inputs, None, embed_size, dropout_rate, is_training, scope="prenet", reuse=None) # (N, T_x, E/2)
             
             # Encoder CBHG 
-            CBHG_out = CBHG(prenet_out, embed_size, encoder_num_banks, num_highwaynet_blocks, dropout_rate, is_training, scope="CBHG", use_CudnnGRU=use_CudnnGRU, reuse=None) # (N, T_x, E)
+            CBHG_out = CBHG(prenet_out, embed_size, num_conv_banks, num_highwaynet_blocks, dropout_rate, is_training, scope="CBHG", use_CudnnGRU=use_CudnnGRU, reuse=None) # (N, T_x, E)
 
 
             # Classificator
@@ -105,19 +116,28 @@ class encoder_spec_phn:
         self.inputs       = inputs
         self.target       = target
 
+        self.CBHG_out     = CBHG_out
         self.y_pred       = y_pred
         self.y_pred_class = y_pred_class
         self.y_logits     = y_logits
         
         return None
-    
+
+    def get_input(self):
+        return self.inputs
+
+
+    def get_outputs(self):
+        output_nt = namedtuple('output_nt', 'y_pred y_pred_class y_logits CBHG_out')
+        return output_nt(self.y_pred, self.y_pred_class, self.y_logits, self.CBHG_out)
+
 
     def _build_loss(self, reuse=None):
         with tf.variable_scope('loss', reuse=reuse):
             self.loss = tf.reduce_mean( tf.nn.softmax_cross_entropy_with_logits_v2(labels=self.target,
                                                                                    logits=self.y_logits), name='cross_entropy')
             
-        tf.summary.scalar('metric/loss', self.loss)
+        self.summary_v += [tf.summary.scalar('metric/loss', self.loss)]
         return None
 
 
@@ -134,9 +154,9 @@ class encoder_spec_phn:
             self.batch_confusion     = tf.confusion_matrix(labels=tf.reshape(labels, [-1]), predictions=tf.reshape(predictions, [-1]), num_classes=num_classes, dtype=tf.float32, name='batch_confusion_matrix')
             self.batch_confusion_img = tf.reshape(self.batch_confusion, [1, num_classes, num_classes, 1], name='batch_confusion_img')
             
-        tf.summary.scalar('metric/acc', self.acc)
-        tf.summary.scalar('metric/mse', self.mse)
-        tf.summary.image('metric/batch_conf_img', self.batch_confusion_img)
+        self.summary_v += [tf.summary.scalar('metric/acc', self.acc),
+                           tf.summary.scalar('metric/mse', self.mse),
+                           tf.summary.image('metric/batch_conf_img', self.batch_confusion_img)]
         return None
 
     
@@ -165,11 +185,11 @@ class encoder_spec_phn:
 
             self.i_epoch_inc_op = tf.assign(self.i_epoch_tf, self.i_epoch_tf + 1)
                                             
-            tf.summary.scalar('learning_rate',       self.learning_rate)
-            tf.summary.scalar('global_step',          self.global_step)
-            tf.summary.scalar('i_epoch_tf',          self.i_epoch_tf)
-            tf.summary.scalar('learning_rate_decay', self.learning_rate_decay)
-            tf.summary.scalar('learning_rate_start', self.learning_rate_start)
+            self.summary_v += [tf.summary.scalar('learning_rate',       self.learning_rate),
+                               tf.summary.scalar('global_step',          self.global_step),
+                               tf.summary.scalar('i_epoch_tf',          self.i_epoch_tf),
+                               tf.summary.scalar('learning_rate_decay', self.learning_rate_decay),
+                               tf.summary.scalar('learning_rate_start', self.learning_rate_start)]
 
             
         return None
@@ -188,16 +208,15 @@ class encoder_spec_phn:
     def _create_saver(self):
         self.saver = tf.train.Saver(max_to_keep=9999, keep_checkpoint_every_n_hours=0.5)
         
-        self.summary_merged = tf.summary.merge_all()
-        if self.mode == 'train':
+        self.summary_merged = tf.summary.merge(self.summary_v)
+        if self.cfg_d['is_training']:
             self.trn_writer = tf.summary.FileWriter(self.cfg_d['log_dir'] + '/trn', graph=self.sess.graph)
             self.val_writer = tf.summary.FileWriter(self.cfg_d['log_dir'] + '/val')
             
-        elif self.mode == 'test':
-            self.tst_writer = tf.summary.FileWriter(self.cfg_d['log_dir'] + '/tst')
-            
-        else:
-            raise Exception(' - ERROR, self.mode={} not implemented'.format(self.mode))
+##        elif self.cfg_d['is_training']:
+##            self.tst_writer = tf.summary.FileWriter(self.cfg_d['log_dir'] + '/tst')
+##        else:
+##            raise Exception(' - ERROR, self.mode={} not implemented'.format(self.mode))
 
         return None
 
@@ -280,6 +299,9 @@ class encoder_spec_phn:
 
     
     def train(self):
+        if not self.cfg_d['is_training']:
+            raise Exception('Model is not in training model')
+        
         self.cfg_d['n_samples_trn'] = self.ds.get_ds_filter( self.cfg_d['ds_trn_filter_d'] ).sum()
 
         self.cfg_d['n_steps_epoch_trn'] = self.cfg_d['n_samples_trn']//self.cfg_d['batch_size']
@@ -350,11 +372,11 @@ class encoder_spec_phn:
         return self.sess.run(var, feed_dict)
 
     
-    def eval_acc(self, ds_iterator, n_batchs=100):
+    def eval_acc(self, ds_sampler, n_batchs=100):
         n_c = 0
         n_t = 0
-        for i_batch in range(n_batchs):
-            mfcc_batch, phn_v_batch = next(ds_iterator)
+        for i_batch, (mfcc_batch, phn_v_batch) in enumerate(ds_sampler):
+            
             y_pred = self.sess.run(self.y_pred, {self.inputs: mfcc_batch})
             y_dec  = np.argmax( y_pred, axis=-1)
             y_true = np.argmax( phn_v_batch, axis=-1)
@@ -365,6 +387,8 @@ class encoder_spec_phn:
             print('acc[{:4d}] = {:5.03f}'.format(int(n_t), acc))
             
         return acc, n_t
+
+
 
 if __name__ == '__main__':
     if os.name == 'nt':
@@ -393,6 +417,7 @@ if __name__ == '__main__':
                 
                 'n_mels':80,
                 'n_mfcc':40,
+                'n_fft':None,
                 'window':'hann',
                 'mfcc_normaleze_first_mfcc':True,
                 'calc_mfcc_derivate':False,
@@ -413,7 +438,7 @@ if __name__ == '__main__':
                    'n_output':61,
                    
                    'embed_size':128, # Para la prenet. Se puede aumentar la dimension. None (usa la cantidad n_mfcc)
-                   'encoder_num_banks':8,
+                   'num_conv_banks':8,
                    'num_highwaynet_blocks':4,
                    'dropout_rate':0.2,
                    'is_training':True,
@@ -436,7 +461,7 @@ if __name__ == '__main__':
                    'n_epochs':        99999,
                    'batch_size':       32,
                    'val_batch_size':   128,
-                   'save_each_n_epochs':10,
+                   'save_each_n_epochs':2,
 
                    'log_dir':'./stats_dir',
                    'model_path':'./encoder_ckpt'}
@@ -457,8 +482,15 @@ if __name__ == '__main__':
         y[y != 1] = 0.0
 
                       
-    model = encoder_spec_phn(model_cfg_d, timit, 'train')
+    model = encoder_spec_phn(model_cfg_d, timit)
 ##    model.exec_train_step(x, y)
     model.train()
 
+##    model.restore()
+##    encoder.eval_acc(timit.window_sampler(ds_filter_d={'ds_type':'TEST'}) )
+
+
+    
+    
+    
 

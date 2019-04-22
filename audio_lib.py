@@ -93,6 +93,7 @@ def calc_MFCC_input(y,
                     win_length=400,
                     n_mels=128,
                     n_mfcc=40,
+                    n_fft=None,
                     window='hann',
                     mfcc_normaleze_first_mfcc=True,
                     mfcc_norm_factor=0.01,
@@ -113,6 +114,7 @@ def calc_MFCC_input(y,
         win_length   : Ancho de la ventana usado para calcular la FFT
         n_mels       : Cantidad de intervalos Mel utilizados para el calculo del espectrograma Mel
         n_mfcc       : Cantidad de intervalos para la DCT utilizados para el calculo del espectrograma MFCC
+        n_fft        : Cantidad de intervalos del spectrograma STFT (si es None usa n_fft=win_length)
         mfcc_normaleze_first_mfcc : Normaliza el primer coeficiente cepstral restando la componente cte inicial
         mean_abs_amp_norm : escala la salida MFCC con este factor.
         clip_output  : El MFCC de salida estará entre -1.0 y 1.0
@@ -130,7 +132,8 @@ def calc_MFCC_input(y,
     else:
         y_preem = y
 
-    n_fft = win_length
+    if n_fft is None:
+        n_fft = win_length
 
     # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
     # Calculando Parcialmente
@@ -157,7 +160,8 @@ def calc_MFCC_input(y,
     M = librosa.filters.mel(sr,
                             n_fft,
                             n_mels,
-                            fmin=0.0, fmax=None,
+                            fmin=0.0,
+                            fmax=None,
                             htk=False,
                             norm=1) # 1 divide the triangular mel weights by the width of the mel band (area normalization)
 
@@ -278,11 +282,11 @@ def from_power_to_wav(P,
                       win_length=800,
                       mean_abs_amp_norm=0.01,
                       n_iter=200,
+                      n_fft=None,
                       verbose=True):
-
-
+    
     F = np.sqrt( librosa.core.db_to_power(P.T/P_dB_norm_factor - 80) )
-    y_pe_rec = griffin_lim_alg(F, win_length, hop_length, num_iters=n_iter, verbose=verbose)
+    y_pe_rec = griffin_lim_alg(F, win_length, hop_length, num_iters=n_iter, n_fft=n_fft, verbose=verbose)
 
     if pre_emphasis != 0:
         y_rec = calc_inv_preemphasis( y_pe_rec, pre_emphasis )
@@ -317,6 +321,7 @@ if __name__ == '__main__':
                                  win_length=400,
                                  n_mels=80,
                                  n_mfcc=40,
+                                 n_fft=None,
                                  window='hamm',
                                  mfcc_normaleze_first_mfcc=True,
                                  mfcc_norm_factor=0.01,
@@ -333,6 +338,7 @@ if __name__ == '__main__':
                               win_length=400,
                               mean_abs_amp_norm=0.01,
                               n_iter=200,
+                              n_fft=None,
                               verbose=True)
     
     sd.play(y, 16000, blocking=True)

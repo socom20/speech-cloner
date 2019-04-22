@@ -33,7 +33,7 @@ class TIMIT:
 
         self.ds_norm          = cfg_d['ds_norm']
 
-        self.n_mfcc           = cfg_d['n_mfcc']         # Cantidad de mfcc en la salica 
+        self.n_mfcc           = cfg_d['n_mfcc']         # Cantidad de mfcc en la salida 
         self.n_timesteps      = cfg_d['n_timesteps']    # Cantidad de de pasos temporales para el muestreo  window_sampler
 
         
@@ -95,6 +95,7 @@ class TIMIT:
                                                                          'win_length',
                                                                          'n_mels',
                                                                          'n_mfcc',
+                                                                         'n_fft',
                                                                          'window',
                                                                          'mfcc_normaleze_first_mfcc',
                                                                          'mfcc_norm_factor',
@@ -169,7 +170,7 @@ class TIMIT:
             phn_conv_d = self.phn2ohv
             for i_sample in range(n_samples):
                 if self.verbose and i_sample%100==0:
-                    print('Salvados:{} de {} samples'.format(i_sample, n_samples))
+                    print(' - Saved: {} of {} samples'.format(i_sample, n_samples))
                 y     = self.ds['wav'][i_sample]
                 phn_v = self.ds['phn_v'][i_sample]
                 
@@ -180,6 +181,7 @@ class TIMIT:
                                              win_length=cfg_d['win_length'],
                                              n_mels=cfg_d['n_mels'],
                                              n_mfcc=cfg_d['n_mfcc'],
+                                             n_fft=cfg_d['n_fft'],
                                              window=cfg_d['window'],
                                              mfcc_normaleze_first_mfcc=cfg_d['mfcc_normaleze_first_mfcc'],
                                              mfcc_norm_factor=cfg_d['mfcc_norm_factor'],
@@ -572,10 +574,11 @@ class TIMIT:
             i_s, i_e, i_sample = idxs_v
             step   = self.cfg_d['hop_length']
             y_wave = self.ds['wav'][i_sample][step*i_s:step*i_e:step]
+            x_wave = np.arange(-0.5, (i_e-i_s)-0.5, 1/step)
             
             h = m_repeat.shape[0]
             y_wave_morm = 0.5* h * ((y_wave-y_wave.min())/(y_wave.max()-y_wave.min()) - 0.5) + h/2
-            plt.plot(y_wave_morm,  'b', alpha=0.5)
+            plt.plot(x_wave, y_wave_morm,  'b', alpha=0.5)
         
         plt.show()
 
@@ -639,6 +642,8 @@ if __name__ == '__main__':
                 
                 'n_mels':80,
                 'n_mfcc':40,
+                'n_fft':None, # None usa n_fft=win_length
+                
                 'window':'hann',
                 'mfcc_normaleze_first_mfcc':True,
                 'mfcc_norm_factor': 0.01,

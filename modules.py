@@ -279,12 +279,12 @@ def highwaynet(inputs, num_units=None, scope="highwaynet", reuse=None):
 
 
 
-def CBHG(inputs, embed_size=256, encoder_num_banks=16, num_highwaynet_blocks=4, dropout_rate=0.5, is_training=True, scope="CBHG", use_CudnnGRU=False, reuse=None):
+def CBHG(inputs, embed_size=256, num_conv_banks=16, num_highwaynet_blocks=4, dropout_rate=0.5, is_training=True, scope="CBHG", use_CudnnGRU=False, reuse=None):
 
 
     with tf.variable_scope(scope, reuse=reuse):
         ## Conv1D banks
-            enc = conv1d_banks(inputs, K=encoder_num_banks, is_training=is_training) # (N, T_x, K*E/2)
+            enc = conv1d_banks(inputs, K=num_conv_banks, is_training=is_training) # (N, T_x, K*E/2)
             
             ## Max pooling
             enc = tf.layers.max_pooling1d(enc, pool_size=2, strides=1, padding="same")  # (N, T_x, K*E/2)
@@ -314,7 +314,7 @@ def CBHG(inputs, embed_size=256, encoder_num_banks=16, num_highwaynet_blocks=4, 
 
 
 if __name__ == '__main__':
-    def model(inputs, embed_size=256, n_output=48, encoder_num_banks=16, num_highwaynet_blocks=4, dropout_rate=0.5, is_training=True, scope="model", use_CudnnGRU=False, reuse=None):
+    def model(inputs, embed_size=256, n_output=48, num_conv_banks=16, num_highwaynet_blocks=4, dropout_rate=0.5, is_training=True, scope="model", use_CudnnGRU=False, reuse=None):
 
         
         with tf.variable_scope(scope, reuse=reuse): 
@@ -322,7 +322,7 @@ if __name__ == '__main__':
             prenet_out = prenet(inputs, None, embed_size, dropout_rate, is_training, scope="prenet", reuse=None) # (N, T_x, E/2)
             
             # Encoder CBHG 
-            CBHG_out = CBHG(prenet_out, embed_size, encoder_num_banks, num_highwaynet_blocks, dropout_rate, is_training, scope="CBHG", use_CudnnGRU=use_CudnnGRU, reuse=None) # (N, T_x, E)
+            CBHG_out = CBHG(prenet_out, embed_size, num_conv_banks, num_highwaynet_blocks, dropout_rate, is_training, scope="CBHG", use_CudnnGRU=use_CudnnGRU, reuse=None) # (N, T_x, E)
 
 
             # Classificator

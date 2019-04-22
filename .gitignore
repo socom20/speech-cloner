@@ -1,5 +1,4 @@
 __*
-Graph
-models_phn
-stats_dir
-encoder_ckpt
+*stats_dir
+*ckpt
+

@@ -2,53 +2,51 @@ import numpy as np
 import matplotlib.pyplot as plt
 import os, sys
 import math
-
+from collections import namedtuple
 
 import tensorflow as tf
 
 
-
 from TIMIT_reader import TIMIT
+from TARGET_spk_reader import TARGET_spk
+
 from modules import prenet, CBHG
 
+from encoder import encoder_spec_phn
 
-class encoder_spec_phn:
-    def __init__(self, cfg_d={}, ds=None, mode='train', verbose=False):
+
+class decoder_specs:
+    def __init__(self, cfg_d={}, ds=None, encoder=None):
         self.cfg_d = cfg_d
         self.ds    = ds
 
         self.i_global_step = 0
         self.i_epoch       = 0
+        self.summary_v     = []
 
-        self.mode = mode
+        self.encoder = encoder
 
         # Creo Modelo
-        self._build_model( input_shape=self.cfg_d['input_shape'],
-                           n_output   =self.cfg_d['n_output'],
-                           embed_size=self.cfg_d['embed_size'],
-                           encoder_num_banks=self.cfg_d['encoder_num_banks'],
-                           num_highwaynet_blocks=self.cfg_d['num_highwaynet_blocks'],
-                           dropout_rate=self.cfg_d['dropout_rate'],
-                           is_training=self.cfg_d['is_training'],
-                           scope=self.cfg_d['model_name'],
-                           use_CudnnGRU=self.cfg_d['use_CudnnGRU'],
-                           reuse=None )
+        self._build_model( reuse=None )
 
         
         # Armo la funcion de costo
         self._build_loss(reuse=None)
-        
-        # Armo las metricas
-        self._build_metric(reuse=None)
 
-        # Creo optimizador
-        self._build_optimizer(reuse=None)
+        if self.cfg_d['is_training']:
+            # Creo optimizador
+            self._build_optimizer(reuse=None)
         
         # Inicio la sesion de tf
         self._create_tf_session()
 
         # Creamos Saver (se crea el merge del summary)
         self._create_saver()
+
+        # Si no entrenamos retiramos todas las variables de la collection TRAINABLE_VARIABLES
+        if not self.cfg_d['is_training']:
+            for v in tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, self.cfg_d['model_name']):
+                tf.get_collection_ref(tf.GraphKeys.TRAINABLE_VARIABLES).remove(v)
 
         # Inicializo las variables
         self._initialize_variables()
@@ -57,15 +55,18 @@ class encoder_spec_phn:
 
 
     def _create_tf_session(self):
-        tf_sess_config = tf.ConfigProto()
-        tf_sess_config.gpu_options.allow_growth = True
-        self.sess = tf.Session(config=tf_sess_config)
-
+        if self.encoder is None:
+            tf_sess_config = tf.ConfigProto()
+            tf_sess_config.gpu_options.allow_growth = True
+            self.sess = tf.Session(config=tf_sess_config)
+        else:
+            self.sess = encoder.sess
+            
         return None
 
 
         
-    def _build_model(self, input_shape=(800, 256), n_output=48, embed_size=None, encoder_num_banks=16, num_highwaynet_blocks=4, dropout_rate=0.5, is_training=True, scope="model", use_CudnnGRU=False, reuse=None):
+    def _build_model(self, reuse=None):
         '''
         Args:
           inputs: A 2d tensor with shape of [N, T_x, E], with dtype of int32. Encoder inputs.
@@ -78,66 +79,107 @@ class encoder_spec_phn:
           A collection of Hidden vectors. So-called memory. Has the shape of (N, T_x, E).
         '''
 
-        if embed_size is None:
-            embed_size  = input_shape[-1]
+
+        with tf.variable_scope(self.cfg_d['model_name'], reuse=reuse):
+            if self.encoder is None:
+                self.inputs = tf.placeholder(tf.float32, (None,)+self.cfg_d['input_shape'], name='inputs')
+                inputs = self.inputs
+            else:
+                self.inputs = self.encoder.get_input()
+
+                enc_o = self.encoder.get_outputs()
+                inputs = enc_o.y_logits
+                 
+                assert self.encoder.y_logits.shape.as_list()[1:] == list(self.cfg_d['input_shape']), 'ERROR, input_shape no coincide con la dimensión de salida del encoder.'
+                
+
+            with tf.variable_scope('step1', reuse=reuse): # self.cfg_d['steps_v'][0]['']  self.cfg_d['']
+                step_d = self.cfg_d['steps_v'][0]
+                
+                if step_d['embed_size'] is None:
+                    embed_size = self.cfg_d['input_shape'][-1]
+                else:
+                    embed_size = step_d['embed_size']
+
+                # Encoder pre-net
+                prenet_out = prenet(inputs=inputs,
+                                    num_units=None,
+                                    embed_size=embed_size,
+                                    dropout_rate=self.cfg_d['dropout_rate'],
+                                    is_training=self.cfg_d['is_training'],
+                                    scope="prenet",
+                                    reuse=reuse) # (N, T_x, E/2)
+                
+                # Encoder CBHG 
+                CBHG_out = CBHG(inputs=prenet_out,
+                                embed_size=embed_size,
+                                num_conv_banks=step_d['num_conv_banks'],
+                                num_highwaynet_blocks=step_d['num_highwaynet_blocks'],
+                                dropout_rate=self.cfg_d['dropout_rate'],
+                                is_training=self.cfg_d['is_training'],
+                                scope="CBHG",
+                                use_CudnnGRU=self.cfg_d['use_CudnnGRU'],
+                                reuse=reuse) # (N, T_x, E)
+
+
+
+                
+                self.y_mel      = tf.layers.dense(CBHG_out, step_d['n_output'], activation=None, name="y_logits")                       # (N, T_x, n_mel)
+                self.target_mel = tf.placeholder(tf.float32, (None, self.cfg_d['input_shape'][0], step_d['n_output']), name='target' )  # (N, T_x, n_mel)
             
-        with tf.variable_scope(scope, reuse=reuse):
-            # Inputs para el modelo
-            inputs = tf.placeholder(tf.float32, (None,)+input_shape, name='inputs')# (N, T, E)
-            
-            # Targets para el modelo
-            target = tf.placeholder(tf.float32, (None, input_shape[0], n_output), name='target' )  # (N, T, O)
-            
-            # Encoder pre-net
-            prenet_out = prenet(inputs, None, embed_size, dropout_rate, is_training, scope="prenet", reuse=None) # (N, T_x, E/2)
-            
-            # Encoder CBHG 
-            CBHG_out = CBHG(prenet_out, embed_size, encoder_num_banks, num_highwaynet_blocks, dropout_rate, is_training, scope="CBHG", use_CudnnGRU=use_CudnnGRU, reuse=None) # (N, T_x, E)
 
+            with tf.variable_scope('step2', reuse=reuse):
+                step_d = self.cfg_d['steps_v'][1]
 
-            # Classificator
-            y_logits     = tf.layers.dense(CBHG_out, n_output, activation=None, name="y_logits")  # (N, T, O)   tf.nn.relu
-            y_pred       = tf.nn.softmax(y_logits, name='y_pred')  # (N, T, O)
-            y_pred_class = tf.to_int32(tf.argmax(y_logits, axis=-1), name='y_pred_class')  # (N, T)
+                if step_d['embed_size'] is None:
+                    embed_size = CBHG_out.shape.as_list()[-1]
+                else:
+                    embed_size = step_d['embed_size']
+                
+                # Encoder pre-net
+                prenet_out = prenet(inputs=CBHG_out,
+                                    num_units=None,
+                                    embed_size=embed_size,
+                                    dropout_rate=self.cfg_d['dropout_rate'],
+                                    is_training=self.cfg_d['is_training'],
+                                    scope="prenet",
+                                    reuse=reuse) # (N, T_x, E/2)
+                
+                # Encoder CBHG 
+                CBHG_out = CBHG(inputs=prenet_out,
+                                embed_size=embed_size,
+                                num_conv_banks=step_d['num_conv_banks'],
+                                num_highwaynet_blocks=step_d['num_highwaynet_blocks'],
+                                dropout_rate=self.cfg_d['dropout_rate'],
+                                is_training=self.cfg_d['is_training'],
+                                scope="CBHG",
+                                use_CudnnGRU=self.cfg_d['use_CudnnGRU'],
+                                reuse=reuse) # (N, T_x, E)
 
-
-        # Hago que las variables sean parte del objeto modelo
-        self.inputs       = inputs
-        self.target       = target
-
-        self.y_pred       = y_pred
-        self.y_pred_class = y_pred_class
-        self.y_logits     = y_logits
+                
+                self.y_stft      = tf.layers.dense(CBHG_out, step_d['n_output'], activation=None, name="y_logits")                       # (N, T_x, n_stft=n_fft//2+1)
+                self.target_stft = tf.placeholder(tf.float32, (None, self.cfg_d['input_shape'][0], step_d['n_output']), name='target' )  # (N, T_x, n_stft=n_fft//2+1)
         
         return None
     
 
+
+
     def _build_loss(self, reuse=None):
         with tf.variable_scope('loss', reuse=reuse):
-            self.loss = tf.reduce_mean( tf.nn.softmax_cross_entropy_with_logits_v2(labels=self.target,
-                                                                                   logits=self.y_logits), name='cross_entropy')
-            
-        tf.summary.scalar('metric/loss', self.loss)
+            self.mel_loss  = self.cfg_d['mel_loss_weight'] * tf.reduce_mean( tf.squared_difference( self.y_mel, self.target_mel ),   name='mel_loss' )
+ 
+            self.stft_loss = self.cfg_d['stft_loss_weight'] * tf.reduce_mean( tf.squared_difference( self.y_stft, self.target_stft ), name='stft_loss' )
+
+
+            self.loss = self.mel_loss + self.stft_loss
+
+        
+        self.summary_v += [tf.summary.scalar('dec_metric/mel_loss', self.mel_loss),
+                           tf.summary.scalar('dec_metric/stft_loss', self.stft_loss),
+                           tf.summary.scalar('dec_metric/loss', self.loss)]
         return None
 
-
-    def _build_metric(self, reuse=None):
-        with tf.variable_scope('metric', reuse=reuse):
-            labels      = tf.to_int32(tf.argmax(self.target, axis=-1), name='labels')      # dims  [N, T]
-            predictions = tf.to_int32(tf.argmax(self.y_pred, axis=-1), name='predictions') # dims  [N, T]
-
-            
-            self.acc = tf.contrib.metrics.accuracy(labels=labels, predictions=predictions, name='accuracy')
-            self.mse = tf.reduce_mean( tf.squared_difference(self.y_pred, self.target),    name='mean_squared_error')
-
-            num_classes = self.cfg_d['n_output']
-            self.batch_confusion     = tf.confusion_matrix(labels=tf.reshape(labels, [-1]), predictions=tf.reshape(predictions, [-1]), num_classes=num_classes, dtype=tf.float32, name='batch_confusion_matrix')
-            self.batch_confusion_img = tf.reshape(self.batch_confusion, [1, num_classes, num_classes, 1], name='batch_confusion_img')
-            
-        tf.summary.scalar('metric/acc', self.acc)
-        tf.summary.scalar('metric/mse', self.mse)
-        tf.summary.image('metric/batch_conf_img', self.batch_confusion_img)
-        return None
 
     
     def _build_optimizer(self, reuse=None):
@@ -165,13 +207,12 @@ class encoder_spec_phn:
 
             self.i_epoch_inc_op = tf.assign(self.i_epoch_tf, self.i_epoch_tf + 1)
                                             
-            tf.summary.scalar('learning_rate',       self.learning_rate)
-            tf.summary.scalar('global_step',          self.global_step)
-            tf.summary.scalar('i_epoch_tf',          self.i_epoch_tf)
-            tf.summary.scalar('learning_rate_decay', self.learning_rate_decay)
-            tf.summary.scalar('learning_rate_start', self.learning_rate_start)
-
-            
+            self.summary_v += [tf.summary.scalar('learning_rate',       self.learning_rate),
+                               tf.summary.scalar('global_step',          self.global_step),
+                               tf.summary.scalar('i_epoch_tf',          self.i_epoch_tf),
+                               tf.summary.scalar('learning_rate_decay', self.learning_rate_decay),
+                               tf.summary.scalar('learning_rate_start', self.learning_rate_start)]
+          
         return None
 
     
@@ -188,16 +229,15 @@ class encoder_spec_phn:
     def _create_saver(self):
         self.saver = tf.train.Saver(max_to_keep=9999, keep_checkpoint_every_n_hours=0.5)
         
-        self.summary_merged = tf.summary.merge_all()
-        if self.mode == 'train':
+        self.summary_merged = tf.summary.merge(self.summary_v)
+        if self.cfg_d['is_training']:
             self.trn_writer = tf.summary.FileWriter(self.cfg_d['log_dir'] + '/trn', graph=self.sess.graph)
             self.val_writer = tf.summary.FileWriter(self.cfg_d['log_dir'] + '/val')
             
-        elif self.mode == 'test':
-            self.tst_writer = tf.summary.FileWriter(self.cfg_d['log_dir'] + '/tst')
-            
-        else:
-            raise Exception(' - ERROR, self.mode={} not implemented'.format(self.mode))
+##        elif self.mode == 'test':
+##            self.tst_writer = tf.summary.FileWriter(self.cfg_d['log_dir'] + '/tst')
+##        else:
+##            raise Exception(' - ERROR, self.mode={} not implemented'.format(self.mode))
 
         return None
 
@@ -235,35 +275,41 @@ class encoder_spec_phn:
         return None
 
 
-    def exec_train_step(self, inputs, target):
+    def exec_train_step(self, inputs, target_mel, target_stft):
         
-        ret = self.sess.run([self.loss,
-                             self.acc,
-                             self.mse,
+        ret = self.sess.run([self.mel_loss,
+                             self.stft_loss,
+                             self.loss,
                              self.global_step,
                              self.train_step,
-                             self.summary_merged], feed_dict={self.inputs:inputs, self.target:target})
+                             self.summary_merged],
+                            
+                            feed_dict={self.inputs:inputs,
+                                       self.target_mel:target_mel,
+                                       self.target_stft:target_stft})
         
-        loss, acc, mse, global_step, train_step, summary_merged = ret
+        mel_loss, stft_loss, loss, global_step, train_step, summary_merged = ret
 
         self.i_global_step = global_step
         self.trn_writer.add_summary(summary_merged, self.i_global_step)
         
-        return (loss, acc, mse, global_step, train_step)
+        return (mel_loss, stft_loss, loss, global_step, train_step)
 
     
 
-    def exec_calc_metrics(self, inputs, target, summary_mode='validation'):
+    def exec_calc_metrics(self, inputs, target_mel, target_stft, summary_mode='validation'):
 
-        ret = self.sess.run([self.acc,
-                             self.mse,
+        ret = self.sess.run([self.mel_loss,
+                             self.stft_loss,
                              self.loss,
-                             self.batch_confusion_img,
                              self.global_step,
-                             self.summary_merged], feed_dict={self.inputs:inputs, self.target:target})
+                             self.summary_merged], feed_dict={self.inputs:inputs,
+                                                              self.target_mel:target_mel,
+                                                              self.target_stft:target_stft})
+
 
         
-        acc, mse, loss, batch_confusion_img, global_step, summary_merged = ret
+        mel_loss, stft_loss, loss, global_step, summary_merged = ret
 
 
         self.i_global_step = global_step
@@ -276,24 +322,26 @@ class encoder_spec_phn:
         else:
             raise Exception(' - ERROR, summary_mode={} not implemented'.format(summary_mode))
             
-        return acc, mse, loss
+        return mel_loss, stft_loss, loss
 
     
     def train(self):
-        self.cfg_d['n_samples_trn'] = self.ds.get_ds_filter( self.cfg_d['ds_trn_filter_d'] ).sum()
+        self.cfg_d['n_samples_trn'] = 16000 #self.ds.get_n_windows()[0]
 
         self.cfg_d['n_steps_epoch_trn'] = self.cfg_d['n_samples_trn']//self.cfg_d['batch_size']
 
-        self.sampler_trn = self.ds.window_sampler(batch_size=self.cfg_d['batch_size'],
-                                                  n_epochs=99999999,
-                                                  randomize_samples=self.cfg_d['randomize_samples'],
-                                                  ds_filter_d=self.cfg_d['ds_trn_filter_d'])
+        self.sampler_trn = self.ds.spec_window_sampler(batch_size=self.cfg_d['batch_size'],
+                                                       n_epochs=99999999,
+                                                       randomize_samples=self.cfg_d['randomize_samples'],
+                                                       sample_trn=True,
+                                                       prop_val=self.cfg_d['ds_prop_val'])
 
 
-        self.sampler_val = self.ds.window_sampler(batch_size=self.cfg_d['batch_size'],
-                                                  n_epochs=self.cfg_d['val_batch_size'],
-                                                  randomize_samples=self.cfg_d['randomize_samples'],
-                                                  ds_filter_d=self.cfg_d['ds_val_filter_d'])
+        self.sampler_val = self.ds.spec_window_sampler(batch_size=self.cfg_d['batch_size'],
+                                                       n_epochs=99999999,
+                                                       randomize_samples=self.cfg_d['randomize_samples'],
+                                                       sample_trn=False,
+                                                       prop_val=self.cfg_d['ds_prop_val'])
 
         self.iter_val  = iter(self.sampler_val)
         
@@ -308,18 +356,18 @@ class encoder_spec_phn:
         # Refresh: i_epoch lr 
         self.i_epoch, self.lr = self.sess.run( [self.i_epoch_tf, self.lr_decay_op] )
         
-        for mfcc_trn, phn_v_trn in self.sampler_trn:
-            loss, acc, mse, global_step, train_step = self.exec_train_step(mfcc_trn, phn_v_trn)
+        for mfcc_trn, mel_trn, stft_trn in self.sampler_trn:
+            mel_loss_trn, stft_loss_trn, loss_trn, global_step, train_step = self.exec_train_step(mfcc_trn, mel_trn, stft_trn)
                         
-            print(' - i_epoch={}   global_step={}   loss_trn={:6.3f}  acc_trn={:6.3f}  mse_trn={:6.3f}'.format(self.i_epoch, global_step, loss, acc, mse) )
+            print(' - i_epoch={}   global_step={}   mel_loss_trn={:6.3f}  stft_loss_trn={:6.3f}  loss_trn={:6.3f}'.format(self.i_epoch, global_step, mel_loss_trn, stft_loss_trn, loss_trn) )
 
             if (global_step/self.cfg_d['n_steps_epoch_trn']) % self.cfg_d['save_each_n_epochs'] == 0:
                 # new epoch
                 print(' Saving, epoch={} ...'.format(self.i_epoch))
                 self.save()
-                mfcc_val, phn_v_val = next(self.iter_val)
-                acc_val, mse_val, loss_val = self.exec_calc_metrics(mfcc_val, phn_v_val)
-                print(' - i_epoch={}   global_step={}   loss_val={:6.3f}  acc_val={:6.3f}   mse_val={:6.3f}'.format(self.i_epoch, int(global_step), loss_val, acc_val, mse_val) )
+                mfcc_val, mel_val, stft_val = next(self.iter_val)
+                mel_loss_val, stft_loss_val, loss_val = self.exec_calc_metrics(mfcc_val, mel_val, stft_val)
+                print(' - i_epoch={}   global_step={}   mel_loss_val={:6.3f}   stft_loss_val={:6.3f}   loss_val={:6.3f}'.format(self.i_epoch, int(global_step), mel_loss_val, stft_loss_val, loss_val) )
 
                 
 
@@ -336,19 +384,28 @@ class encoder_spec_phn:
 
 
     def predict(self, x, batch_size=32):
-        y_pred_v = []
+        y_mel_v  = []
+        y_stft_v = []
         
         for i_s in range(0, x.shape[0], batch_size):
             x_batch = x[i_s:min(i_s+batch_size, x.shape[0])]
-            y_pred = self.sess.run(self.y_pred, {self.inputs:x_batch} )
-            y_pred_v.append(y_pred)
+            y_mel, y_stft = self.sess.run([self.y_mel, self.y_stft], {self.inputs:x_batch} )
+            
+            y_mel_v.append(y_mel)
+            y_stft_v.append(y_stft)
 
-        return np.concatenate(y_pred_v, axis=0)
+        predict_nt = namedtuple('predict', 'y_mel y_stft')
+        
+        ret_nt = predict_nt(np.concatenate(y_mel_v, axis=0),
+                            np.concatenate(y_stft_v, axis=0))
+        return ret_nt
 
 
     def run(self, var, feed_dict={}):
         return self.sess.run(var, feed_dict)
 
+    def get_input_shape(self):
+        return tuple(self.inputs.shape.as_list()[1:])
     
     def eval_acc(self, ds_iterator, n_batchs=100):
         n_c = 0
@@ -366,102 +423,178 @@ class encoder_spec_phn:
             
         return acc, n_t
 
+    
+
 if __name__ == '__main__':
     if os.name == 'nt':
         ds_path = r'G:\Downloads\timit'
     else:
         ds_path = '/media/sergio/EVO970/UNIR/TFM/code/data_sets/TIMIT'
 
+    timit_ds_cfg_d = {'ds_path':ds_path,
+                      'use_all_phonemes':True,
+                      'ds_norm':(0.0, 10.0),
+                      'remake_samples_cache':False,
+                      'random_seed':None,
+                      'ds_cache_name':'timit_cache.pickle',
+                      'phn_mfcc_cache_name':'phn_mfcc_cache.h5py',
+                      'verbose':True,
+
+                      'sample_rate':16000,  #Frecuencia de muestreo los archivos de audio Hz
+
+                      'pre_emphasis': 0.97,
+                      
+                      'hop_length_ms':   5.0, # 2.5ms = 40c | 5.0ms = 80c (@ 16kHz)
+                      'win_length_ms':  25.0, # 25.0ms = 400c (@ 16kHz)
+                      'n_timesteps':   400, # 800ts*(win_length_ms=2.5ms)= 2000ms  Cantidad de hop_length_ms en una ventana de prediccion.
+                      
+                      'n_mels':80,
+                      'n_mfcc':40,
+                      'n_fft':None,
+                      'window':'hann',
+                      'mfcc_normaleze_first_mfcc':True,
+                      'calc_mfcc_derivate':False,
+                        
+                      'mfcc_norm_factor':0.01,
+                      'M_dB_norm_factor':0.01,
+                      'P_dB_norm_factor':0.01,
+                        
+                        
+                      'mean_abs_amp_norm':0.003,
+                      'clip_output':True}
+
+
+    if os.name == 'nt':
+        ds_path = r'G:\Downloads\TRG\L. Frank Baum/The Wonderful Wizard of Oz'
+    else:
+        ds_path = '/media/sergio/EVO970/UNIR/TFM/code/data_sets/TRG/L. Frank Baum/The Wonderful Wizard of Oz'
+
         
+    target_ds_cfg_d = {'ds_path':ds_path,
+                       'sample_rate':timit_ds_cfg_d['sample_rate'],  #Frecuencia de muestreo los archivos de audio Hz
+                       'exclude_files_with':['Oz-01', 'Oz-25'],
+                       'ds_cache_name':'AH_target_cache.pickle',
+                       'verbose':True,
+                       'spec_cache_name':'spec_cache.h5py',
 
-    ds_cfg_d = {'ds_path':ds_path,
-                'use_all_phonemes':True,
-                'ds_norm':(0.0, 10.0),
-                'remake_samples_cache':False,
-                'random_seed':None,
-                'ds_cache_name':'timit_cache.pickle',
-                'phn_mfcc_cache_name':'phn_mfcc_cache.h5py',
-                'verbose':True,
-
-                'sample_rate':16000,  #Frecuencia de muestreo los archivos de audio Hz
-
-                'pre_emphasis': 0.97,
-                
-                'hop_length_ms':   5.0, # 2.5ms = 40c | 5.0ms = 80c (@ 16kHz)
-                'win_length_ms':  25.0, # 25.0ms = 400c (@ 16kHz)
-                'n_timesteps':   400, # 800ts*(win_length_ms=2.5ms)= 2000ms  Cantidad de hop_length_ms en una ventana de prediccion.
-                
-                'n_mels':80,
-                'n_mfcc':40,
-                'window':'hann',
-                'mfcc_normaleze_first_mfcc':True,
-                'mfcc_norm_factor': 0.01,
-                'calc_MFCC_derivate':False,
-                'P_dB_norm_factor':0.01,
-                
-                'mean_abs_amp_norm':0.003,
-                'clip_output':True}
+                       'ds_norm':(0.0, 1.0),
+                       'remake_samples_cache':False,
+                       'random_seed':         None,
+                        
+                       'pre_emphasis': timit_ds_cfg_d['pre_emphasis'],
+                       
+                       'hop_length_ms': timit_ds_cfg_d['hop_length_ms'], # 2.5ms = 40c | 5.0ms = 80c (@ 16kHz)
+                       'win_length_ms': timit_ds_cfg_d['win_length_ms'], # 25.0ms = 400c (@ 16kHz)
+                       'n_timesteps':   timit_ds_cfg_d['n_timesteps'], # 800ts*(win_length_ms=2.5ms)= 2000ms  Cantidad de hop_length_ms en una ventana de prediccion.
+                       
+                       'n_mels': timit_ds_cfg_d['n_mels'],
+                       'n_mfcc': timit_ds_cfg_d['n_mfcc'],
+                       'n_fft':  timit_ds_cfg_d['n_fft'], # None usa n_fft=win_length
+                        
+                       'window':                    timit_ds_cfg_d['window'],
+                       'mfcc_normaleze_first_mfcc': timit_ds_cfg_d['mfcc_normaleze_first_mfcc'],
+                       'mfcc_norm_factor':          timit_ds_cfg_d['mfcc_norm_factor'],
+                       'calc_mfcc_derivate':        timit_ds_cfg_d['calc_mfcc_derivate'],
+                       'M_dB_norm_factor':          timit_ds_cfg_d['M_dB_norm_factor'],
+                       'P_dB_norm_factor':          timit_ds_cfg_d['P_dB_norm_factor'],
+                        
+                       'mean_abs_amp_norm': timit_ds_cfg_d['mean_abs_amp_norm'],
+                       'clip_output':       timit_ds_cfg_d['clip_output']}
 
 
     
-    model_cfg_d = {'model_name':'spec_model',
+    enc_cfg_d = {'model_name':'encoder',
+                 'input_shape':(target_ds_cfg_d['n_timesteps'], target_ds_cfg_d['n_mfcc']),
+                 'n_output':61,
                    
-                   'input_shape':(ds_cfg_d['n_timesteps'], 61),
+                 'embed_size':128, # Para la prenet. Se puede aumentar la dimension. None (usa la cantidad n_mfcc)
+                 'num_conv_banks':8,
+                 'num_highwaynet_blocks':4,
+                 'dropout_rate':0.2,
+                 'is_training':False,
+                 'use_CudnnGRU':False, # sys.platform!='win32', # Solo cuda para linux
+
                    
-                   'steps_v':[{'embed_size':128, # Para la prenet. Se puede aumentar la dimension. None (usa la cantidad n_mfcc)
-                               'encoder_num_banks':8,
-                               'num_highwaynet_blocks':4,
-                               'output_shape':(ds_cfg_d['n_timesteps'], ds_cfg_d['n_mfcc'])},
-                              
-                              {'embed_size':128, # Para la prenet. Se puede aumentar la dimension. None (usa la cantidad n_mfcc)
-                               'encoder_num_banks':8,
-                               'num_highwaynet_blocks':4,
-                               'output_shape':(ds_cfg_d['n_timesteps'], ds_cfg_d['n_mfcc'])}]
+
+                 'learning_rate':5.0e-3,
+                 'decay':1.0e-2,
                    
-                    'dropout_rate':0.2,
-                    'is_training':True,
-                    'use_CudnnGRU':False, # sys.platform!='win32', # Solo cuda para linux
-
-                   'model_name':'encoder',
-
-                   'learning_rate':5.0e-3,
-                   'decay':1.0e-2,
+                 'beta1':0.9,
+                 'beta2':0.999,
+                 'epsilon':1e-8,
+                  
+                 'ds_trn_filter_d':{'ds_type':'TRAIN'},
+                 'ds_val_filter_d':{'ds_type':'TEST'},
+                 'ds_tst_filter_d':{'ds_type':'TEST'},
+                 'randomize_samples':True,
                    
-                   'beta1':0.9,
-                   'beta2':0.999,
-                   'epsilon':1e-8,
+                 'n_epochs':        99999,
+                 'batch_size':       32,
+                 'val_batch_size':   128,
+                 'save_each_n_epochs':10,
+
+                 'log_dir':   './enc_stats_dir',
+                 'model_path':'./enc_ckpt'}
+
+
+    n_stft = (target_ds_cfg_d['n_fft'] or target_ds_cfg_d.get('win_length') or (int(target_ds_cfg_d['win_length_ms']*target_ds_cfg_d['sample_rate']/1000.0))) // 2 + 1
+    dec_cfg_d = {'model_name':'decoder',
                    
-                   'ds_trn_filter_d':{'ds_type':'TRAIN'},
-                   'ds_val_filter_d':{'ds_type':'TEST'},
-                   'ds_tst_filter_d':{'ds_type':'TEST'},
-                   'randomize_samples':True,
+                 'input_shape':(enc_cfg_d['input_shape'][0], enc_cfg_d['n_output']),
+                 
+                 'steps_v':[{'embed_size':128, # Para la prenet. Se puede aumentar la dimension. None (usa la cantidad n_mfcc)
+                             'num_conv_banks':8,
+                             'num_highwaynet_blocks':4,
+                             'n_output':target_ds_cfg_d['n_mels']},
+                            
+                            {'embed_size':128, # Para la prenet. Se puede aumentar la dimension. None (usa la cantidad n_mfcc)
+                             'num_conv_banks':8,
+                             'num_highwaynet_blocks':4,
+                             'n_output': n_stft}],
                    
-                   'n_epochs':        99999,
-                   'batch_size':       32,
-                   'val_batch_size':   128,
-                   'save_each_n_epochs':10,
+                  'dropout_rate':0.2,
+                  'is_training':True,
+                  'use_CudnnGRU':False, # sys.platform!='win32', # Solo cuda para linux
 
-                   'log_dir':'./stats_dir',
-                   'model_path':'./encoder_ckpt'}
+                 'learning_rate':5.0e-3,
+                 'decay':1.0e-2,
+                   
+                 'beta1':0.9,
+                 'beta2':0.999,
+                 'epsilon':1e-8,
 
+                 'mel_loss_weight':100,
+                 'stft_loss_weight':100,
+                   
+                 'ds_prop_val':0.3,
+                 'randomize_samples':True,
+                   
+                 'n_epochs':        99999,
+                 'batch_size':       32,
+                 'val_batch_size':   128,
+                 'save_each_n_epochs':10,
 
-
-
-    if True:
-        timit = TIMIT(ds_cfg_d)
-    else:
-        timit = None
-        np.random.seed(0)
-        x = np.random.random( (32, model_cfg_d['input_shape'][0], model_cfg_d['input_shape'][1]) )
-        y = np.random.random( (32, model_cfg_d['input_shape'][0], model_cfg_d['n_output']) )
-        for i in range(y.shape[0]):
-            y[i,np.arange(y[i].shape[0]), np.argmax(y[i], axis=-1)] = 1.0
-
-        y[y != 1] = 0.0
-
-                      
-    model = encoder_spec_phn(model_cfg_d, timit, 'train')
-##    model.exec_train_step(x, y)
-    model.train()
+                 'log_dir':   './dec_stats_dir',
+                 'model_path':'./dec_ckpt'}
 
 
+
+##    timit   = TIMIT(timit_ds_cfg_d)
+    trg_spk = TARGET_spk(target_ds_cfg_d)
+
+    
+    encoder = encoder_spec_phn(cfg_d=enc_cfg_d, ds=None)
+    
+##    encoder.eval_acc(timit.window_sampler(ds_filter_d={'ds_type':'TEST'}) )
+
+    decoder = decoder_specs(cfg_d=dec_cfg_d, ds=trg_spk, encoder=encoder)
+    encoder.restore()
+    decoder.train()
+
+##    if True:
+##        y = np.random.random( (32,) + decoder.get_input_shape())
+##        y_pred = decoder.predict(y)
+##
+##        mfcc, mel, stft = next(iter( trg_spk.spec_window_sampler() ))
+##        
+##        decoder.exec_calc_metrics(mfcc, mel, stft)
