@@ -7,9 +7,9 @@ from collections import namedtuple
 import tensorflow as tf
 
 
-
 from TIMIT_reader import TIMIT
 from modules import prenet, CBHG
+from aux import *
 
 
 class encoder_spec_phn:
@@ -94,7 +94,7 @@ class encoder_spec_phn:
             
         with tf.variable_scope(scope, reuse=reuse):
             # Inputs para el modelo
-            inputs = tf.placeholder(tf.float32, (None,)+input_shape, name='inputs')# (N, T, E)
+            inputs = tf.placeholder(tf.float32, (None,)+tuple(input_shape), name='inputs')# (N, T, E)
             
             # Targets para el modelo
             target = tf.placeholder(tf.float32, (None, input_shape[0], n_output), name='target' )  # (N, T, O)
@@ -437,16 +437,16 @@ if __name__ == '__main__':
                    'input_shape':(ds_cfg_d['n_timesteps'], ds_cfg_d['n_mfcc']),
                    'n_output':61,
                    
-                   'embed_size':128, # Para la prenet. Se puede aumentar la dimension. None (usa la cantidad n_mfcc)
-                   'num_conv_banks':8,
-                   'num_highwaynet_blocks':4,
+                   'embed_size':64, # Para la prenet. Se puede aumentar la dimension. None (usa la cantidad n_mfcc)
+                   'num_conv_banks':4,
+                   'num_highwaynet_blocks':2,
                    'dropout_rate':0.2,
-                   'is_training':True,
+                   'is_training':False,
                    'use_CudnnGRU':False, # sys.platform!='win32', # Solo cuda para linux
 
                    'model_name':'encoder',
 
-                   'learning_rate':1.0e-3,
+                   'learning_rate':5.0e-3,
                    'decay':1.0e-2,
                    
                    'beta1':0.9,
@@ -461,13 +461,14 @@ if __name__ == '__main__':
                    'n_epochs':        99999,
                    'batch_size':       32,
                    'val_batch_size':   128,
-                   'save_each_n_epochs':2,
+                   'save_each_n_epochs':3,
 
                    'log_dir':'./stats_dir',
                    'model_path':'./encoder_ckpt'}
 
 
-
+##    save_cfg_d(ds_cfg_d,    './ds_cfg_d.json')
+##    save_cfg_d(model_cfg_d, './encoder_cfg_d.json')
 
     if True:
         timit = TIMIT(ds_cfg_d)
@@ -484,10 +485,10 @@ if __name__ == '__main__':
                       
     model = encoder_spec_phn(model_cfg_d, timit)
 ##    model.exec_train_step(x, y)
-    model.train()
+##    model.train()
 
-##    model.restore()
-##    encoder.eval_acc(timit.window_sampler(ds_filter_d={'ds_type':'TEST'}) )
+    model.restore()
+    model.eval_acc(timit.window_sampler(ds_filter_d={'ds_type':'TEST'}) )
 
 
     

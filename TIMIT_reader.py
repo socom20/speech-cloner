@@ -573,7 +573,7 @@ class TIMIT:
         if idxs_v is not None:
             i_s, i_e, i_sample = idxs_v
             step   = self.cfg_d['hop_length']
-            y_wave = self.ds['wav'][i_sample][step*i_s:step*i_e:step]
+            y_wave = self.ds['wav'][i_sample][step*i_s:step*i_e]
             x_wave = np.arange(-0.5, (i_e-i_s)-0.5, 1/step)
             
             h = m_repeat.shape[0]
@@ -659,10 +659,10 @@ if __name__ == '__main__':
     timit = TIMIT(ds_cfg_d)
 
     
-##    mfcc_batch, phn_v_batch, idxs_v_batch = next(iter(timit.window_sampler(50,1, yield_idxs=True)))
-##    for mfcc, phn_v, idxs_v in zip(mfcc_batch, phn_v_batch, idxs_v_batch):
-##        
-##        timit.spec_show(mfcc, phn_v, idxs_v)
+    mfcc_batch, phn_v_batch, idxs_v_batch = next(iter(timit.window_sampler(50,1, yield_idxs=True)))
+    for mfcc, phn_v, idxs_v in zip(mfcc_batch, phn_v_batch, idxs_v_batch):
+        
+        timit.spec_show(mfcc, phn_v, idxs_v)
 
     
 
@@ -680,13 +680,13 @@ if __name__ == '__main__':
 ##        break
 
     
-    t0 = time.time()
-    n_batch=0
-    for mfcc, phn in timit.window_sampler(batch_size=32, n_epochs=1, ds_filter_d={'ds_type':'TRAIN'}):
-        n_batch += 1
-##        print(mfcc.shape)
-##        print(phn.shape)
-    print(' Muestreo completo en {:0.02f} s, n_batches={}'.format(time.time() - t0, n_batch))
+##    t0 = time.time()
+##    n_batch=0
+##    for mfcc, phn in timit.window_sampler(batch_size=32, n_epochs=1, ds_filter_d={'ds_type':'TRAIN'}):
+##        n_batch += 1
+####        print(mfcc.shape)
+####        print(phn.shape)
+##    print(' Muestreo completo en {:0.02f} s, n_batches={}'.format(time.time() - t0, n_batch))
 
         
 ##    for x, y in timit.phoneme_sampler():

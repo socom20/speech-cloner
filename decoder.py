@@ -13,7 +13,7 @@ from TARGET_spk_reader import TARGET_spk
 from modules import prenet, CBHG
 
 from encoder import encoder_spec_phn
-
+from aux import *
 
 class decoder_specs:
     def __init__(self, cfg_d={}, ds=None, encoder=None):
@@ -60,7 +60,7 @@ class decoder_specs:
             tf_sess_config.gpu_options.allow_growth = True
             self.sess = tf.Session(config=tf_sess_config)
         else:
-            self.sess = encoder.sess
+            self.sess = self.encoder.sess
             
         return None
 
@@ -82,7 +82,7 @@ class decoder_specs:
 
         with tf.variable_scope(self.cfg_d['model_name'], reuse=reuse):
             if self.encoder is None:
-                self.inputs = tf.placeholder(tf.float32, (None,)+self.cfg_d['input_shape'], name='inputs')
+                self.inputs = tf.placeholder(tf.float32, (None,)+tuple(self.cfg_d['input_shape']), name='inputs')
                 inputs = self.inputs
             else:
                 self.inputs = self.encoder.get_input()
@@ -135,9 +135,12 @@ class decoder_specs:
                     embed_size = CBHG_out.shape.as_list()[-1]
                 else:
                     embed_size = step_d['embed_size']
+
+
+                inputs_step2 = tf.concat([CBHG_out, self.inputs], axis=-1) #self.y_mel #CBHG_out
                 
                 # Encoder pre-net
-                prenet_out = prenet(inputs=CBHG_out,
+                prenet_out = prenet(inputs=inputs_step2,
                                     num_units=None,
                                     embed_size=embed_size,
                                     dropout_rate=self.cfg_d['dropout_rate'],
@@ -172,7 +175,7 @@ class decoder_specs:
             self.stft_loss = self.cfg_d['stft_loss_weight'] * tf.reduce_mean( tf.squared_difference( self.y_stft, self.target_stft ), name='stft_loss' )
 
 
-            self.loss = self.mel_loss + self.stft_loss
+            self.loss = tf.log(self.mel_loss) + tf.log(self.stft_loss)
 
         
         self.summary_v += [tf.summary.scalar('dec_metric/mel_loss', self.mel_loss),
@@ -426,42 +429,12 @@ class decoder_specs:
     
 
 if __name__ == '__main__':
-    if os.name == 'nt':
-        ds_path = r'G:\Downloads\timit'
-    else:
-        ds_path = '/media/sergio/EVO970/UNIR/TFM/code/data_sets/TIMIT'
+##    if os.name == 'nt':
+##        ds_path = r'G:\Downloads\timit'
+##    else:
+##        ds_path = '/media/sergio/EVO970/UNIR/TFM/code/data_sets/TIMIT'
 
-    timit_ds_cfg_d = {'ds_path':ds_path,
-                      'use_all_phonemes':True,
-                      'ds_norm':(0.0, 10.0),
-                      'remake_samples_cache':False,
-                      'random_seed':None,
-                      'ds_cache_name':'timit_cache.pickle',
-                      'phn_mfcc_cache_name':'phn_mfcc_cache.h5py',
-                      'verbose':True,
-
-                      'sample_rate':16000,  #Frecuencia de muestreo los archivos de audio Hz
-
-                      'pre_emphasis': 0.97,
-                      
-                      'hop_length_ms':   5.0, # 2.5ms = 40c | 5.0ms = 80c (@ 16kHz)
-                      'win_length_ms':  25.0, # 25.0ms = 400c (@ 16kHz)
-                      'n_timesteps':   400, # 800ts*(win_length_ms=2.5ms)= 2000ms  Cantidad de hop_length_ms en una ventana de prediccion.
-                      
-                      'n_mels':80,
-                      'n_mfcc':40,
-                      'n_fft':None,
-                      'window':'hann',
-                      'mfcc_normaleze_first_mfcc':True,
-                      'calc_mfcc_derivate':False,
-                        
-                      'mfcc_norm_factor':0.01,
-                      'M_dB_norm_factor':0.01,
-                      'P_dB_norm_factor':0.01,
-                        
-                        
-                      'mean_abs_amp_norm':0.003,
-                      'clip_output':True}
+    timit_ds_cfg_d = load_cfg_d('./hp/ds_enc_cfg_d.json')
 
 
     if os.name == 'nt':
@@ -501,40 +474,10 @@ if __name__ == '__main__':
                        'mean_abs_amp_norm': timit_ds_cfg_d['mean_abs_amp_norm'],
                        'clip_output':       timit_ds_cfg_d['clip_output']}
 
-
-    
-    enc_cfg_d = {'model_name':'encoder',
-                 'input_shape':(target_ds_cfg_d['n_timesteps'], target_ds_cfg_d['n_mfcc']),
-                 'n_output':61,
-                   
-                 'embed_size':128, # Para la prenet. Se puede aumentar la dimension. None (usa la cantidad n_mfcc)
-                 'num_conv_banks':8,
-                 'num_highwaynet_blocks':4,
-                 'dropout_rate':0.2,
-                 'is_training':False,
-                 'use_CudnnGRU':False, # sys.platform!='win32', # Solo cuda para linux
-
-                   
-
-                 'learning_rate':5.0e-3,
-                 'decay':1.0e-2,
-                   
-                 'beta1':0.9,
-                 'beta2':0.999,
-                 'epsilon':1e-8,
-                  
-                 'ds_trn_filter_d':{'ds_type':'TRAIN'},
-                 'ds_val_filter_d':{'ds_type':'TEST'},
-                 'ds_tst_filter_d':{'ds_type':'TEST'},
-                 'randomize_samples':True,
-                   
-                 'n_epochs':        99999,
-                 'batch_size':       32,
-                 'val_batch_size':   128,
-                 'save_each_n_epochs':10,
-
-                 'log_dir':   './enc_stats_dir',
-                 'model_path':'./enc_ckpt'}
+    save_cfg_d(target_ds_cfg_d, './hp/ds_dec_cfg_d.json')
+        
+    enc_cfg_d = load_cfg_d('./hp/encoder_cfg_d.json')
+    enc_cfg_d['is_training'] = False
 
 
     n_stft = (target_ds_cfg_d['n_fft'] or target_ds_cfg_d.get('win_length') or (int(target_ds_cfg_d['win_length_ms']*target_ds_cfg_d['sample_rate']/1000.0))) // 2 + 1
@@ -543,21 +486,21 @@ if __name__ == '__main__':
                  'input_shape':(enc_cfg_d['input_shape'][0], enc_cfg_d['n_output']),
                  
                  'steps_v':[{'embed_size':128, # Para la prenet. Se puede aumentar la dimension. None (usa la cantidad n_mfcc)
-                             'num_conv_banks':8,
-                             'num_highwaynet_blocks':4,
+                             'num_conv_banks':16,
+                             'num_highwaynet_blocks':8,
                              'n_output':target_ds_cfg_d['n_mels']},
                             
-                            {'embed_size':128, # Para la prenet. Se puede aumentar la dimension. None (usa la cantidad n_mfcc)
-                             'num_conv_banks':8,
-                             'num_highwaynet_blocks':4,
+                            {'embed_size':256, # Para la prenet. Se puede aumentar la dimension. None (usa la cantidad n_mfcc)
+                             'num_conv_banks':16,
+                             'num_highwaynet_blocks':8,
                              'n_output': n_stft}],
                    
                   'dropout_rate':0.2,
                   'is_training':True,
-                  'use_CudnnGRU':False, # sys.platform!='win32', # Solo cuda para linux
+                  'use_CudnnGRU':True, # sys.platform!='win32', # Solo cuda para linux
 
                  'learning_rate':1.0e-4,
-                 'decay':0.0e-1,
+                 'decay':5.0e-3,
                    
                  'beta1':0.9,
                  'beta2':0.999,
@@ -570,26 +513,36 @@ if __name__ == '__main__':
                  'randomize_samples':True,
                    
                  'n_epochs':        99999,
-                 'batch_size':         32,
+                 'batch_size':        128,
                  'val_batch_size':    128,
                  'save_each_n_epochs':  2,
 
                  'log_dir':   './dec_stats_dir',
                  'model_path':'./dec_ckpt'}
 
+    save_cfg_d(dec_cfg_d, './hp/decoder_cfg_d.json')
 
-
-##    timit   = TIMIT(timit_ds_cfg_d)
+    
     trg_spk = TARGET_spk(target_ds_cfg_d)
 
     
     encoder = encoder_spec_phn(cfg_d=enc_cfg_d, ds=None)
-    
-##    encoder.eval_acc(timit.window_sampler(ds_filter_d={'ds_type':'TEST'}) )
+
+##    if True:
+##        encoder.restore()
+##        timit   = TIMIT(timit_ds_cfg_d)
+##        encoder.eval_acc(timit.window_sampler(ds_filter_d={'ds_type':'TEST'}) )
 
     decoder = decoder_specs(cfg_d=dec_cfg_d, ds=trg_spk, encoder=encoder)
     encoder.restore()
+    decoder.restore()
+
+    # Asigno nuevo lr_decay
+    decoder.run(tf.assign(decoder.learning_rate_decay, dec_cfg_d['decay']))
+    
     decoder.train()
+
+
 
 ##    if True:
 ##        y = np.random.random( (32,) + decoder.get_input_shape())
