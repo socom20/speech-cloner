@@ -13,7 +13,7 @@ from TARGET_spk_reader import TARGET_spk
 from modules import prenet, CBHG
 
 from encoder import encoder_spec_phn
-from aux import *
+from aux_func import *
 
 class decoder_specs:
     def __init__(self, cfg_d={}, ds=None, encoder=None):

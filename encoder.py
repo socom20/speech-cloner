@@ -9,7 +9,7 @@ import tensorflow as tf
 
 from TIMIT_reader import TIMIT
 from modules import prenet, CBHG
-from aux import *
+from aux_func import *
 
 
 class encoder_spec_phn:
