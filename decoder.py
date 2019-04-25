@@ -88,7 +88,7 @@ class decoder_specs:
                 self.inputs = self.encoder.get_input()
 
                 enc_o = self.encoder.get_outputs()
-                inputs = enc_o.y_logits
+                inputs = enc_o.y_pred  # Usamos softmax que tiene menos informacion del hablante.
                  
                 assert self.encoder.y_logits.shape.as_list()[1:] == list(self.cfg_d['input_shape']), 'ERROR, input_shape no coincide con la dimensión de salida del encoder.'
                 
@@ -329,7 +329,7 @@ class decoder_specs:
 
     
     def train(self):
-        self.cfg_d['n_samples_trn'] = 16000 #self.ds.get_n_windows()[0]
+        self.cfg_d['n_samples_trn'] = self.ds.get_n_windows(self.cfg_d['ds_prop_val'])[0]
 
         self.cfg_d['n_steps_epoch_trn'] = self.cfg_d['n_samples_trn']//self.cfg_d['batch_size']
 
@@ -499,15 +499,15 @@ if __name__ == '__main__':
                   'is_training':True,
                   'use_CudnnGRU':True, # sys.platform!='win32', # Solo cuda para linux
 
-                 'learning_rate':1.0e-4,
+                 'learning_rate':1.0e-3,
                  'decay':5.0e-3,
                    
                  'beta1':0.9,
                  'beta2':0.999,
                  'epsilon':1e-8,
 
-                 'mel_loss_weight':100,
-                 'stft_loss_weight':100,
+                 'mel_loss_weight': 400,
+                 'stft_loss_weight':400,
                    
                  'ds_prop_val':0.3,
                  'randomize_samples':True,
@@ -535,10 +535,11 @@ if __name__ == '__main__':
 
     decoder = decoder_specs(cfg_d=dec_cfg_d, ds=trg_spk, encoder=encoder)
     encoder.restore()
-    decoder.restore()
 
-    # Asigno nuevo lr_decay
-    decoder.run(tf.assign(decoder.learning_rate_decay, dec_cfg_d['decay']))
+##    # Restauro entrenamiento pausado
+##    decoder.restore()
+##    # Asigno nuevo lr_decay
+##    decoder.run(tf.assign(decoder.learning_rate_decay, dec_cfg_d['decay']))
     
     decoder.train()
 

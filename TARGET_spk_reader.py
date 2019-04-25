@@ -280,7 +280,7 @@ class TARGET_spk:
 
     def get_n_windows(self, prop_val=0.3):
 
-        n_windows     = sum([self.ds['wav'][i].shape[0] // self.cfg_d['win_length'] for i in range(self.ds['wav'].shape[0])])
+        n_windows     = sum([self.ds['wav'][i].shape[0] // (self.cfg_d['hop_length'] * self.cfg_d['n_timesteps']) for i in range(self.ds['wav'].shape[0])])
         n_windows_trn = int((1-prop_val)*n_windows)
         n_windows_val = n_windows - n_windows_trn
         
@@ -371,7 +371,7 @@ if __name__ == '__main__':
                 
                 'hop_length_ms':   5.0, # 2.5ms = 40c | 5.0ms = 80c (@ 16kHz)
                 'win_length_ms':  25.0, # 25.0ms = 400c (@ 16kHz)
-                'n_timesteps':   400, # 800ts*(win_length_ms=2.5ms)= 2000ms  Cantidad de hop_length_ms en una ventana de prediccion.
+                'n_timesteps':   400, # 800ts*(hop_length_ms=2.5ms)= 2000ms  Cantidad de hop_length_ms en una ventana de prediccion.
                 
                 'n_mels':80,
                 'n_mfcc':40,
