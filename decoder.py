@@ -486,13 +486,13 @@ if __name__ == '__main__':
                  'input_shape':(enc_cfg_d['input_shape'][0], enc_cfg_d['n_output']),
                  
                  'steps_v':[{'embed_size':128, # Para la prenet. Se puede aumentar la dimension. None (usa la cantidad n_mfcc)
-                             'num_conv_banks':16,
-                             'num_highwaynet_blocks':8,
+                             'num_conv_banks':4,
+                             'num_highwaynet_blocks':4,
                              'n_output':target_ds_cfg_d['n_mels']},
                             
-                            {'embed_size':256, # Para la prenet. Se puede aumentar la dimension. None (usa la cantidad n_mfcc)
-                             'num_conv_banks':16,
-                             'num_highwaynet_blocks':8,
+                            {'embed_size':128, # Para la prenet. Se puede aumentar la dimension. None (usa la cantidad n_mfcc)
+                             'num_conv_banks':4,
+                             'num_highwaynet_blocks':4,
                              'n_output': n_stft}],
                    
                   'dropout_rate':0.2,

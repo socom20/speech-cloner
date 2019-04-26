@@ -42,7 +42,7 @@ def show_spec_comp(mel_true, mel_pred, stft_true, stft_pred, vert=False):
     return None
 
 
-def translate(mfcc, mel, stft, cfg_d, t_s=5, t_e=60, n_iter=200, output_path='./output'):
+def translate(mfcc, mel, stft, cfg_d, t_s=5, t_e=60, n_iter=200, output_path='./output', save_output=False):
     import librosa
     import sounddevice as sd
 
@@ -73,7 +73,7 @@ def translate(mfcc, mel, stft, cfg_d, t_s=5, t_e=60, n_iter=200, output_path='./
                                    pre_emphasis=cfg_d['pre_emphasis'],
                                    hop_length=cfg_d['hop_length'],
                                    win_length=cfg_d['win_length'],
-                                   mean_abs_amp_norm=cfg_d['mean_abs_amp_norm'],
+                                   mean_abs_amp_norm=15*cfg_d['mean_abs_amp_norm'],
                                    n_iter=n_iter,
                                    n_fft=cfg_d['n_fft'])
 
@@ -82,21 +82,25 @@ def translate(mfcc, mel, stft, cfg_d, t_s=5, t_e=60, n_iter=200, output_path='./
                                    pre_emphasis=cfg_d['pre_emphasis'],
                                    hop_length=cfg_d['hop_length'],
                                    win_length=cfg_d['win_length'],
-                                   mean_abs_amp_norm=cfg_d['mean_abs_amp_norm'],
+                                   mean_abs_amp_norm=15*cfg_d['mean_abs_amp_norm'],
                                    n_iter=n_iter,
                                    n_fft=cfg_d['n_fft'])
 
 
-    input('play y_wav_true: ')
+    input('ENTER for play y_wav_true: ')
     sd.play(y_wav_true, cfg_d['sample_rate'], blocking=True)
-    input('play y_wav_pred: ')
+    input('ENTER for play y_wav_pred: ')
     sd.play(y_wav_pred, cfg_d['sample_rate'], blocking=True)
 
-    print('Salvando salida')
-    librosa.output.write_wav(output_path+'/y_wav_true.wav', y_wav_true, cfg_d['sample_rate'], norm=True)
-    librosa.output.write_wav(output_path+'/y_wav_pred.wav', y_wav_pred, cfg_d['sample_rate'], norm=True)
+    if save_output:
+        print('Salvando salida')
+        if not os.path.exists(output_path):
+            os.mkdir(output_path)
+            
+        librosa.output.write_wav(output_path+'/y_wav_true.wav', y_wav_true, cfg_d['sample_rate'], norm=True)
+        librosa.output.write_wav(output_path+'/y_wav_pred.wav', y_wav_pred, cfg_d['sample_rate'], norm=True)
 
-    return None
+    return y_wav_true, y_wav_pred
 
 
 
@@ -119,7 +123,7 @@ if __name__ == '__main__':
 ##    encoder.eval_acc(timit.window_sampler(ds_filter_d={'ds_type':'TEST'}  ) )
 
 
-    input('Press ENTER: ')
+    print('Press ENTER to continue: ', end=''); input()
     
 
     decoder = decoder_specs(cfg_d=dec_cfg_d, ds=None, encoder=encoder)
@@ -127,48 +131,50 @@ if __name__ == '__main__':
     decoder.restore()
 
 
-    mfcc, mel, stft = next( iter( trg_spk.spec_window_sampler(sample_trn=True) ) )
+    if 0:
+        print('TEST 1: trg_spk_mfcc to trg_stft')
+        mfcc, mel, stft = next( iter( trg_spk.spec_window_sampler(sample_trn=True) ) )
+
+        y_pred = decoder.predict(mfcc)
+        for i in range(32):
+
+            show_spec_comp(mel[i], y_pred.y_mel[i], stft[i], y_pred.y_stft[i])
+
+            if True:
+                y_wav_true = from_power_to_wav(stft[i],
+                                               P_dB_norm_factor=target_ds_cfg_d['P_dB_norm_factor'],
+                                               pre_emphasis=target_ds_cfg_d['pre_emphasis'],
+                                               hop_length=target_ds_cfg_d['hop_length'],
+                                               win_length=target_ds_cfg_d['win_length'],
+                                               mean_abs_amp_norm=15*target_ds_cfg_d['mean_abs_amp_norm'],
+                                               n_iter=200,
+                                               n_fft=target_ds_cfg_d['n_fft'])
+
+                y_wav_pred = from_power_to_wav(y_pred.y_stft[i],
+                                               P_dB_norm_factor=target_ds_cfg_d['P_dB_norm_factor'],
+                                               pre_emphasis=target_ds_cfg_d['pre_emphasis'],
+                                               hop_length=target_ds_cfg_d['hop_length'],
+                                               win_length=target_ds_cfg_d['win_length'],
+                                               mean_abs_amp_norm=15*target_ds_cfg_d['mean_abs_amp_norm'],
+                                               n_iter=200,
+                                               n_fft=target_ds_cfg_d['n_fft'])
+
+                print('Press ENTER to continue: y_wav_true: ', end=''); input()
+                trg_spk.play(np.tile(y_wav_true,3), True)
+                print('Press ENTER to continue: y_wav_pred: ', end=''); input()
+                trg_spk.play(np.tile(y_wav_pred,3), True)
 
 
-
-    
-    y_pred = decoder.predict(mfcc)
-    for i in range(32):
-
-        show_spec_comp(mel[i], y_pred.y_mel[i], stft[i], y_pred.y_stft[i])
-
-        if True:
-            y_wav_true = from_power_to_wav(stft[i],
-                                       P_dB_norm_factor=target_ds_cfg_d['P_dB_norm_factor'],
-                                       pre_emphasis=target_ds_cfg_d['pre_emphasis'],
-                                       hop_length=target_ds_cfg_d['hop_length'],
-                                       win_length=target_ds_cfg_d['win_length'],
-                                       mean_abs_amp_norm=target_ds_cfg_d['mean_abs_amp_norm'],
-                                       n_iter=200,
-                                       n_fft=target_ds_cfg_d['n_fft'])
-
-            y_wav_pred = from_power_to_wav(y_pred.y_stft[i],
-                                       P_dB_norm_factor=target_ds_cfg_d['P_dB_norm_factor'],
-                                       pre_emphasis=target_ds_cfg_d['pre_emphasis'],
-                                       hop_length=target_ds_cfg_d['hop_length'],
-                                       win_length=target_ds_cfg_d['win_length'],
-                                       mean_abs_amp_norm=target_ds_cfg_d['mean_abs_amp_norm'],
-                                       n_iter=200,
-                                       n_fft=target_ds_cfg_d['n_fft'])
-
-            input('y_wav_true: ')
-            trg_spk.play(np.tile(y_wav_true,3), True)
-            input('y_wav_pred: ')
-            trg_spk.play(np.tile(y_wav_pred,3), True)
-
-
-            input('Press ENTER to continue: ')
+                print('Press ENTER to continue: ', end=''); input()
+                
 
     if 0:
+        print('TEST 2: trg_spk_mfcc to target_spk_wav')
         mfcc, mel, stft = trg_spk.get_spec(20)
-        translate(mfcc, mel, stft, target_ds_cfg_d, t_s=5, t_e=60, output_path='./output')
+        y_wav_true, y_wav_pred = translate(mfcc, mel, stft, target_ds_cfg_d, t_s=0, t_e=120, output_path='./test_2', save_output=True)
     
-    if 0:
+    if 1:
+        print('TEST 3: other_spk_mfcc to target_spk_wav')
         ds_arctic_cfg_d = { 'ds_path':'/media/sergio/EVO970/UNIR/TFM/code/data_sets/ARCTIC/cmu_arctic',
                             'ds_norm':(0.0, 1.0),
                             'remake_samples_cache':False,
@@ -201,5 +207,10 @@ if __name__ == '__main__':
 
         arctic = ARCTIC(ds_arctic_cfg_d)
         mfcc, mel, stft, phn = arctic.get_spec(np.argmax( arctic.get_ds_filter({'spk_id':'rms', 'sts_id':'a0407'}) ))
-        translate(mfcc, mel, stft, target_ds_cfg_d, t_s=0, t_e=5, output_path='./output')
-        
+        y_wav_true, y_wav_pred = translate(mfcc, mel, stft, target_ds_cfg_d, t_s=0, t_e=5, output_path='./test_3', save_output=True)
+    
+
+
+
+
+
