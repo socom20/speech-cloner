@@ -20,8 +20,9 @@ from decoder import decoder_specs
 
 from aux_func import *
 
-from audio_lib import from_power_to_wav
-
+from audio_lib import from_power_to_wav, calc_MFCC_input
+import librosa
+import sounddevice as sd
 
 
 def show_spec_comp(mel_true, mel_pred, stft_true, stft_pred, vert=False):
@@ -43,8 +44,6 @@ def show_spec_comp(mel_true, mel_pred, stft_true, stft_pred, vert=False):
 
 
 def translate(mfcc, mel, stft, cfg_d, t_s=5, t_e=60, n_iter=200, output_path='./output', save_output=False):
-    import librosa
-    import sounddevice as sd
 
     hop = cfg_d['hop_length']
     n_times = cfg_d['n_timesteps']
@@ -168,12 +167,12 @@ if __name__ == '__main__':
                 print('Press ENTER to continue: ', end=''); input()
                 
 
-    if 0:
+    if 1:
         print('TEST 2: trg_spk_mfcc to target_spk_wav')
         mfcc, mel, stft = trg_spk.get_spec(20)
         y_wav_true, y_wav_pred = translate(mfcc, mel, stft, target_ds_cfg_d, t_s=0, t_e=120, output_path='./test_2', save_output=True)
     
-    if 1:
+    if 0:
         print('TEST 3: other_spk_mfcc to target_spk_wav')
         ds_arctic_cfg_d = { 'ds_path':'/media/sergio/EVO970/UNIR/TFM/code/data_sets/ARCTIC/cmu_arctic',
                             'ds_norm':(0.0, 1.0),
@@ -210,6 +209,55 @@ if __name__ == '__main__':
         y_wav_true, y_wav_pred = translate(mfcc, mel, stft, target_ds_cfg_d, t_s=0, t_e=5, output_path='./test_3', save_output=True)
     
 
+    if 0:
+        print('TEST 4: other_spk_mfcc to target_spk_wav')
+        wav_cfg_d = {'wav_path':'/media/sergio/EVO970/UNIR/TFM/dataset/VCTK-Corpus/VCTK-Corpus/wav48/p374/p374_023.wav',
+                     'wav_norm':(0.0, 1.0),
+                     'sample_rate':16000,  #Frecuencia de muestreo los archivos de audio Hz
+
+                     'pre_emphasis': 0.97,
+                          
+                     'hop_length_ms':   5.0, # 2.5ms = 40c | 5.0ms = 80c (@ 16kHz)
+                     'win_length_ms':  25.0, # 25.0ms = 400c (@ 16kHz)
+                     'n_timesteps':   400, # 800ts*(win_length_ms=2.5ms)= 2000ms  Cantidad de hop_length_ms en una ventana de prediccion.
+                            
+                     'n_mels':80,
+                     'n_mfcc':40,
+                     'n_fft':None, # None usa n_fft=win_length
+                            
+                     'window':'hann',
+                     'mfcc_normaleze_first_mfcc':True,
+                     'mfcc_norm_factor': 0.01,
+                     'calc_mfcc_derivate':False,
+                     'M_dB_norm_factor':0.01,
+                     'P_dB_norm_factor':0.01,
+                            
+                     'mean_abs_amp_norm':0.003,
+                     'clip_output':True}
+
+        wav_cfg_d['hop_length'] = int( wav_cfg_d['hop_length_ms'] * wav_cfg_d['sample_rate'] / 1000 )
+        wav_cfg_d['win_length'] = int( wav_cfg_d['win_length_ms'] * wav_cfg_d['sample_rate'] / 1000 )
+        
+        y, _ = librosa.load(wav_cfg_d['wav_path'], wav_cfg_d['sample_rate'])
+
+        mfcc, mel, stft = calc_MFCC_input( y,
+                                           sr=wav_cfg_d['sample_rate'],
+                                           pre_emphasis=wav_cfg_d['pre_emphasis'],
+                                           hop_length=wav_cfg_d['hop_length'],
+                                           win_length=wav_cfg_d['win_length'],
+                                           n_mels=wav_cfg_d['n_mels'],
+                                           n_mfcc=wav_cfg_d['n_mfcc'],
+                                           n_fft=wav_cfg_d['n_fft'],
+                                           window=wav_cfg_d['window'],
+                                           mfcc_normaleze_first_mfcc=wav_cfg_d['mfcc_normaleze_first_mfcc'],
+                                           mfcc_norm_factor=wav_cfg_d['mfcc_norm_factor'],
+                                           calc_mfcc_derivate=wav_cfg_d['calc_mfcc_derivate'],
+                                           M_dB_norm_factor=wav_cfg_d['M_dB_norm_factor'],
+                                           P_dB_norm_factor=wav_cfg_d['P_dB_norm_factor'],
+                                           mean_abs_amp_norm=wav_cfg_d['mean_abs_amp_norm'],
+                                           clip_output=wav_cfg_d['clip_output'])
+        
+        y_wav_true, y_wav_pred = translate(mfcc, mel, stft, target_ds_cfg_d, t_s=1, t_e=12, output_path='./test_4', save_output=True)
 
 
 

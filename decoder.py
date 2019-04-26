@@ -137,7 +137,10 @@ class decoder_specs:
                     embed_size = step_d['embed_size']
 
 
-                inputs_step2 = tf.concat([CBHG_out, self.inputs], axis=-1) #self.y_mel #CBHG_out
+                if False:
+                    inputs_step2 = tf.concat([CBHG_out, self.inputs], axis=-1)
+                else:
+                    inputs_step2 = CBHG_out
                 
                 # Encoder pre-net
                 prenet_out = prenet(inputs=inputs_step2,
@@ -485,14 +488,14 @@ if __name__ == '__main__':
                    
                  'input_shape':(enc_cfg_d['input_shape'][0], enc_cfg_d['n_output']),
                  
-                 'steps_v':[{'embed_size':128, # Para la prenet. Se puede aumentar la dimension. None (usa la cantidad n_mfcc)
-                             'num_conv_banks':4,
-                             'num_highwaynet_blocks':4,
+                 'steps_v':[{'embed_size':256, # Para la prenet. Se puede aumentar la dimension. None (usa la cantidad n_mfcc)
+                             'num_conv_banks':8,
+                             'num_highwaynet_blocks':8,
                              'n_output':target_ds_cfg_d['n_mels']},
                             
-                            {'embed_size':128, # Para la prenet. Se puede aumentar la dimension. None (usa la cantidad n_mfcc)
-                             'num_conv_banks':4,
-                             'num_highwaynet_blocks':4,
+                            {'embed_size':256, # Para la prenet. Se puede aumentar la dimension. None (usa la cantidad n_mfcc)
+                             'num_conv_banks':8,
+                             'num_highwaynet_blocks':8,
                              'n_output': n_stft}],
                    
                   'dropout_rate':0.2,
