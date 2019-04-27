@@ -20,9 +20,10 @@ class decoder_specs:
         self.cfg_d = cfg_d
         self.ds    = ds
 
-        self.i_global_step = 0
-        self.i_epoch       = 0
-        self.summary_v     = []
+        self.i_global_step  = 0
+        self.i_epoch        = 0
+        self.summary_v      = []
+        self.spec_summary_v = []
 
         self.encoder = encoder
 
@@ -177,13 +178,20 @@ class decoder_specs:
  
             self.stft_loss = self.cfg_d['stft_loss_weight'] * tf.reduce_mean( tf.squared_difference( self.y_stft, self.target_stft ), name='stft_loss' )
 
-
             self.loss = tf.log(self.mel_loss) + tf.log(self.stft_loss)
 
         
         self.summary_v += [tf.summary.scalar('dec_metric/mel_loss', self.mel_loss),
                            tf.summary.scalar('dec_metric/stft_loss', self.stft_loss),
                            tf.summary.scalar('dec_metric/loss', self.loss)]
+
+        tf_cmap = tf.constant(np.array(plt.get_cmap().colors), tf.float32)
+
+        stft_spec = tf.gather(tf_cmap, tf.transpose(tf.cast(tf.round(255*tf.concat([self.y_stft, self.target_stft], axis=-1)), tf.int32), perm=[0, 2, 1]))
+        mel_spec  = tf.gather(tf_cmap, tf.transpose(tf.cast(tf.round(255*tf.concat([self.y_mel,  self.target_mel],  axis=-1)), tf.int32), perm=[0, 2, 1]))
+        
+        self.spec_summary_v += [ tf.summary.image('dec_metric/stft_spec', stft_spec, max_outputs=1),
+                                 tf.summary.image('dec_metric/mel_spec',  mel_spec,  max_outputs=1)]
         return None
 
 
@@ -214,7 +222,7 @@ class decoder_specs:
             self.i_epoch_inc_op = tf.assign(self.i_epoch_tf, self.i_epoch_tf + 1)
                                             
             self.summary_v += [tf.summary.scalar('learning_rate',       self.learning_rate),
-                               tf.summary.scalar('global_step',          self.global_step),
+                               tf.summary.scalar('global_step',         self.global_step),
                                tf.summary.scalar('i_epoch_tf',          self.i_epoch_tf),
                                tf.summary.scalar('learning_rate_decay', self.learning_rate_decay),
                                tf.summary.scalar('learning_rate_start', self.learning_rate_start)]
@@ -235,7 +243,9 @@ class decoder_specs:
     def _create_saver(self):
         self.saver = tf.train.Saver(max_to_keep=9999, keep_checkpoint_every_n_hours=0.5)
         
-        self.summary_merged = tf.summary.merge(self.summary_v)
+        self.summary_merged      = tf.summary.merge(self.summary_v)
+        self.spec_summary_merged = tf.summary.merge(self.spec_summary_v)
+        
         if self.cfg_d['is_training']:
             self.trn_writer = tf.summary.FileWriter(self.cfg_d['log_dir'] + '/trn', graph=self.sess.graph)
             self.val_writer = tf.summary.FileWriter(self.cfg_d['log_dir'] + '/val')
@@ -309,20 +319,22 @@ class decoder_specs:
                              self.stft_loss,
                              self.loss,
                              self.global_step,
-                             self.summary_merged], feed_dict={self.inputs:inputs,
-                                                              self.target_mel:target_mel,
-                                                              self.target_stft:target_stft})
+                             self.summary_merged,
+                             self.spec_summary_merged], feed_dict={self.inputs:inputs,
+                                                                   self.target_mel:target_mel,
+                                                                   self.target_stft:target_stft})
 
 
         
-        mel_loss, stft_loss, loss, global_step, summary_merged = ret
+        mel_loss, stft_loss, loss, global_step, summary_merged, spec_summary_merged = ret
 
 
         self.i_global_step = global_step
         if summary_mode == 'train':
             self.val_writer.add_summary(summary_merged, self.i_global_step)
         elif summary_mode == 'validation':
-            self.val_writer.add_summary(summary_merged,  self.i_global_step)
+            self.val_writer.add_summary(summary_merged,       self.i_global_step)
+            self.val_writer.add_summary(spec_summary_merged,  self.i_global_step)
         elif summary_mode == 'test':
             self.tst_writer.add_summary(summary_merged,  self.i_global_step)            
         else:
@@ -489,12 +501,12 @@ if __name__ == '__main__':
                  'input_shape':(enc_cfg_d['input_shape'][0], enc_cfg_d['n_output']),
                  
                  'steps_v':[{'embed_size':256, # Para la prenet. Se puede aumentar la dimension. None (usa la cantidad n_mfcc)
-                             'num_conv_banks':8,
+                             'num_conv_banks':16,
                              'num_highwaynet_blocks':8,
                              'n_output':target_ds_cfg_d['n_mels']},
                             
                             {'embed_size':256, # Para la prenet. Se puede aumentar la dimension. None (usa la cantidad n_mfcc)
-                             'num_conv_banks':8,
+                             'num_conv_banks':16,
                              'num_highwaynet_blocks':8,
                              'n_output': n_stft}],
                    
@@ -518,7 +530,7 @@ if __name__ == '__main__':
                  'n_epochs':        99999,
                  'batch_size':        128,
                  'val_batch_size':    128,
-                 'save_each_n_epochs':  2,
+                 'save_each_n_epochs':  1,
 
                  'log_dir':   './dec_stats_dir',
                  'model_path':'./dec_ckpt'}

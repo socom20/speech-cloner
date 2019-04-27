@@ -167,7 +167,7 @@ if __name__ == '__main__':
                 print('Press ENTER to continue: ', end=''); input()
                 
 
-    if 1:
+    if 0:
         print('TEST 2: trg_spk_mfcc to target_spk_wav')
         mfcc, mel, stft = trg_spk.get_spec(20)
         y_wav_true, y_wav_pred = translate(mfcc, mel, stft, target_ds_cfg_d, t_s=0, t_e=120, output_path='./test_2', save_output=True)
@@ -209,7 +209,7 @@ if __name__ == '__main__':
         y_wav_true, y_wav_pred = translate(mfcc, mel, stft, target_ds_cfg_d, t_s=0, t_e=5, output_path='./test_3', save_output=True)
     
 
-    if 0:
+    if 1:
         print('TEST 4: other_spk_mfcc to target_spk_wav')
         wav_cfg_d = {'wav_path':'/media/sergio/EVO970/UNIR/TFM/dataset/VCTK-Corpus/VCTK-Corpus/wav48/p374/p374_023.wav',
                      'wav_norm':(0.0, 1.0),
