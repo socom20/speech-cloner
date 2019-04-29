@@ -8,6 +8,7 @@ import tensorflow as tf
 
 
 from TIMIT_reader import TIMIT
+from ARCTIC_reader import ARCTIC
 from TARGET_spk_reader import TARGET_spk
 
 from modules import prenet, CBHG
@@ -178,7 +179,10 @@ class decoder_specs:
  
             self.stft_loss = self.cfg_d['stft_loss_weight'] * tf.reduce_mean( tf.squared_difference( self.y_stft, self.target_stft ), name='stft_loss' )
 
-            self.loss = tf.log(self.mel_loss) + tf.log(self.stft_loss)
+            if False:
+                self.loss = tf.log(self.mel_loss) + tf.log(self.stft_loss)
+            else:
+                self.loss = self.mel_loss + self.stft_loss
 
         
         self.summary_v += [tf.summary.scalar('dec_metric/mel_loss', self.mel_loss),
@@ -452,25 +456,60 @@ if __name__ == '__main__':
     timit_ds_cfg_d = load_cfg_d('./hp/ds_enc_cfg_d.json')
 
 
+##    if os.name == 'nt':
+##        ds_path = r'G:\Downloads\TRG\L. Frank Baum/The Wonderful Wizard of Oz'
+##    else:
+##        ds_path = '/media/sergio/EVO970/UNIR/TFM/code/data_sets/TRG/L. Frank Baum/The Wonderful Wizard of Oz'
+
+##    target_ds_cfg_d = {'ds_path':ds_path,
+##                       'sample_rate':timit_ds_cfg_d['sample_rate'],  #Frecuencia de muestreo los archivos de audio Hz
+##                       'exclude_files_with':['Oz-01', 'Oz-25'],
+##                       'ds_cache_name':'AH_target_cache.pickle',
+##                       'verbose':True,
+##                       'spec_cache_name':'spec_cache.h5py',
+##
+##                       'ds_norm':(0.0, 1.0),
+##                       'remake_samples_cache':False,
+##                       'random_seed':         None,
+##                        
+##                       'pre_emphasis': timit_ds_cfg_d['pre_emphasis'],
+##                       
+##                       'hop_length_ms': timit_ds_cfg_d['hop_length_ms'], # 2.5ms = 40c | 5.0ms = 80c (@ 16kHz)
+##                       'win_length_ms': timit_ds_cfg_d['win_length_ms'], # 25.0ms = 400c (@ 16kHz)
+##                       'n_timesteps':   timit_ds_cfg_d['n_timesteps'], # 800ts*(win_length_ms=2.5ms)= 2000ms  Cantidad de hop_length_ms en una ventana de prediccion.
+##                       
+##                       'n_mels': timit_ds_cfg_d['n_mels'],
+##                       'n_mfcc': timit_ds_cfg_d['n_mfcc'],
+##                       'n_fft':  timit_ds_cfg_d['n_fft'], # None usa n_fft=win_length
+##                        
+##                       'window':                    timit_ds_cfg_d['window'],
+##                       'mfcc_normaleze_first_mfcc': timit_ds_cfg_d['mfcc_normaleze_first_mfcc'],
+##                       'mfcc_norm_factor':          timit_ds_cfg_d['mfcc_norm_factor'],
+##                       'calc_mfcc_derivate':        timit_ds_cfg_d['calc_mfcc_derivate'],
+##                       'M_dB_norm_factor':          timit_ds_cfg_d['M_dB_norm_factor'],
+##                       'P_dB_norm_factor':          timit_ds_cfg_d['P_dB_norm_factor'],
+##                        
+##                       'mean_abs_amp_norm': timit_ds_cfg_d['mean_abs_amp_norm'],
+##                       'clip_output':       timit_ds_cfg_d['clip_output']}
+
+
+
     if os.name == 'nt':
-        ds_path = r'G:\Downloads\TRG\L. Frank Baum/The Wonderful Wizard of Oz'
+        ds_path = r'G:\Downloads\ARCTIC\cmu_arctic'
     else:
-        ds_path = '/media/sergio/EVO970/UNIR/TFM/code/data_sets/TRG/L. Frank Baum/The Wonderful Wizard of Oz'
+        ds_path = '/media/sergio/EVO970/UNIR/TFM/code/data_sets/ARCTIC/cmu_arctic'
 
-        
     target_ds_cfg_d = {'ds_path':ds_path,
-                       'sample_rate':timit_ds_cfg_d['sample_rate'],  #Frecuencia de muestreo los archivos de audio Hz
-                       'exclude_files_with':['Oz-01', 'Oz-25'],
-                       'ds_cache_name':'AH_target_cache.pickle',
-                       'verbose':True,
-                       'spec_cache_name':'spec_cache.h5py',
-
                        'ds_norm':(0.0, 1.0),
-                       'remake_samples_cache':False,
-                       'random_seed':         None,
-                        
+                        'remake_samples_cache':False,
+                        'random_seed':None,
+                        'ds_cache_name':'arctic_cache.pickle',
+                        'spec_cache_name':'spec_cache.h5py',
+                        'verbose':True,
+
+                       'sample_rate':timit_ds_cfg_d['sample_rate'],  #Frecuencia de muestreo los archivos de audio Hz
                        'pre_emphasis': timit_ds_cfg_d['pre_emphasis'],
-                       
+
                        'hop_length_ms': timit_ds_cfg_d['hop_length_ms'], # 2.5ms = 40c | 5.0ms = 80c (@ 16kHz)
                        'win_length_ms': timit_ds_cfg_d['win_length_ms'], # 25.0ms = 400c (@ 16kHz)
                        'n_timesteps':   timit_ds_cfg_d['n_timesteps'], # 800ts*(win_length_ms=2.5ms)= 2000ms  Cantidad de hop_length_ms en una ventana de prediccion.
@@ -488,6 +527,8 @@ if __name__ == '__main__':
                         
                        'mean_abs_amp_norm': timit_ds_cfg_d['mean_abs_amp_norm'],
                        'clip_output':       timit_ds_cfg_d['clip_output']}
+
+    
 
     save_cfg_d(target_ds_cfg_d, './hp/ds_dec_cfg_d.json')
         
@@ -515,7 +556,7 @@ if __name__ == '__main__':
                   'use_CudnnGRU':True, # sys.platform!='win32', # Solo cuda para linux
 
                  'learning_rate':1.0e-3,
-                 'decay':5.0e-3,
+                 'decay':1.0e-3,
                    
                  'beta1':0.9,
                  'beta2':0.999,
@@ -530,7 +571,7 @@ if __name__ == '__main__':
                  'n_epochs':        99999,
                  'batch_size':        128,
                  'val_batch_size':    128,
-                 'save_each_n_epochs':  1,
+                 'save_each_n_epochs':  5,
 
                  'log_dir':   './dec_stats_dir',
                  'model_path':'./dec_ckpt'}
@@ -538,8 +579,9 @@ if __name__ == '__main__':
     save_cfg_d(dec_cfg_d, './hp/decoder_cfg_d.json')
 
     
-    trg_spk = TARGET_spk(target_ds_cfg_d)
+##    trg_spk = TARGET_spk(target_ds_cfg_d)
 
+    trg_spk = ARCTIC(target_ds_cfg_d)
     
     encoder = encoder_spec_phn(cfg_d=enc_cfg_d, ds=None)
 
@@ -550,12 +592,14 @@ if __name__ == '__main__':
 
     decoder = decoder_specs(cfg_d=dec_cfg_d, ds=trg_spk, encoder=encoder)
     encoder.restore()
-
-##    # Restauro entrenamiento pausado
-##    decoder.restore()
-##    # Asigno nuevo lr_decay
-##    decoder.run(tf.assign(decoder.learning_rate_decay, dec_cfg_d['decay']))
     
+    # Restauro entrenamiento pausado
+##    decoder.restore()
+##    # -------- Asigno nuevo lr_decay, lr_start --------
+##    decoder.run(tf.assign(decoder.learning_rate_start, dec_cfg_d['learning_rate']))
+##    decoder.run(tf.assign(decoder.learning_rate_decay, dec_cfg_d['decay']))
+##    decoder.run(decoder.lr_decay_op)
+##    # -------------------------------------------------
     decoder.train()
 
 
@@ -567,3 +611,9 @@ if __name__ == '__main__':
 ##        mfcc, mel, stft = next(iter( trg_spk.spec_window_sampler() ))
 ##        
 ##        decoder.exec_calc_metrics(mfcc, mel, stft)
+
+
+
+
+
+

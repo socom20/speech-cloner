@@ -5,8 +5,8 @@ import os
 def remove_group(i, files_v, folder_name, ext_v):
     for e in ext_v:
         file_path = os.path.join(folder_name, files_v[i][0] + e)
-        print(file_path)
-##        os.remove(file_path)
+#        print(file_path)
+        os.remove(file_path)
         
     return None
     

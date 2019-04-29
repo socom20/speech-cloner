@@ -43,15 +43,40 @@ def show_spec_comp(mel_true, mel_pred, stft_true, stft_pred, vert=False):
     return None
 
 
-def translate(mfcc, mel, stft, cfg_d, t_s=5, t_e=60, n_iter=200, output_path='./output', save_output=False):
+def translate(decoder, mfcc, mel, stft, cfg_d, t_s=5, t_e=60, n_iter=200, output_path='./output', save_output=False):
 
-    hop = cfg_d['hop_length']
+    hop     = cfg_d['hop_length']
     n_times = cfg_d['n_timesteps']
-    n_delta = n_times*( ((t_e - t_s) * hop) // n_times + 1)
-    n_s = t_s*hop
-    n_e = n_s + n_delta
+
+    if mfcc.shape[0] % n_times != 0:
+        print('Padding!!')
+        pad_len = (n_times) - (mfcc.shape[0] % n_times)
+        
+        pad_mfcc = np.zeros( (pad_len , mfcc.shape[1]) )
+        mfcc = np.concatenate( [mfcc, pad_mfcc], axis=0 )
+
+        pad_mel = np.zeros( (pad_len, mel.shape[1]) )
+        mel = np.concatenate( [mel, pad_mel], axis=0 )
+        
+        pad_stft = np.zeros( (pad_len, stft.shape[1]) )
+        stft = np.concatenate( [stft, pad_stft], axis=0 )
+        
+        print(mfcc.shape, mel.shape, stft.shape)
+
+        
+    n_hop_s = t_s*cfg_d['sample_rate']//hop
+    n_hop_e = t_e*cfg_d['sample_rate']//hop
+
+    n_hop_e = min(n_hop_e, mfcc.shape[0])
+    
+    n_delta = n_times*( (n_hop_e - n_hop_s) // n_times )
+    n_s = n_hop_s
+    n_e = n_hop_s + n_delta
 
 
+    if n_e <= n_s:
+        raise Exception(' - ERROR, translate: n_e <= n_s.')
+    
     mfcc_input = mfcc[n_s:n_e].reshape( (-1, n_times, mfcc.shape[-1]) )
     stft_true  = stft[n_s:n_e].reshape( (-1, n_times, stft.shape[-1]) )
 
@@ -135,8 +160,8 @@ if __name__ == '__main__':
         mfcc, mel, stft = next( iter( trg_spk.spec_window_sampler(sample_trn=True) ) )
 
         y_pred = decoder.predict(mfcc)
+        
         for i in range(32):
-
             show_spec_comp(mel[i], y_pred.y_mel[i], stft[i], y_pred.y_stft[i])
 
             if True:
@@ -170,7 +195,7 @@ if __name__ == '__main__':
     if 0:
         print('TEST 2: trg_spk_mfcc to target_spk_wav')
         mfcc, mel, stft = trg_spk.get_spec(20)
-        y_wav_true, y_wav_pred = translate(mfcc, mel, stft, target_ds_cfg_d, t_s=0, t_e=120, output_path='./test_2', save_output=True)
+        y_wav_true, y_wav_pred = translate(decoder, mfcc, mel, stft, target_ds_cfg_d, t_s=0, t_e=120, output_path='./test_2', save_output=True)
     
     if 0:
         print('TEST 3: other_spk_mfcc to target_spk_wav')
@@ -206,12 +231,16 @@ if __name__ == '__main__':
 
         arctic = ARCTIC(ds_arctic_cfg_d)
         mfcc, mel, stft, phn = arctic.get_spec(np.argmax( arctic.get_ds_filter({'spk_id':'rms', 'sts_id':'a0407'}) ))
-        y_wav_true, y_wav_pred = translate(mfcc, mel, stft, target_ds_cfg_d, t_s=0, t_e=5, output_path='./test_3', save_output=True)
+        y_wav_true, y_wav_pred = translate(decoder, mfcc, mel, stft, target_ds_cfg_d, t_s=0, t_e=5, output_path='./test_3', save_output=True)
     
 
     if 1:
         print('TEST 4: other_spk_mfcc to target_spk_wav')
-        wav_cfg_d = {'wav_path':'/media/sergio/EVO970/UNIR/TFM/dataset/VCTK-Corpus/VCTK-Corpus/wav48/p374/p374_023.wav',
+        wav_path = '/media/sergio/EVO970/UNIR/TFM/dataset/VCTK-Corpus/VCTK-Corpus/wav48/p299/p299_005.wav'
+##        wav_path = '/media/sergio/EVO970/UNIR/TFM/dataset/VCTK-Corpus/VCTK-Corpus/wav48/p374/p374_023.wav'
+##        wav_path = '/media/sergio/EVO970/UNIR/TFM/dataset/VCTK-Corpus/VCTK-Corpus/wav48/p339/p339_008.wav'
+##        wav_path = '/media/sergio/EVO970/UNIR/TFM/dataset/VCTK-Corpus/VCTK-Corpus/wav48/p267/p267_023.wav'
+        wav_cfg_d = {'wav_path':wav_path,
                      'wav_norm':(0.0, 1.0),
                      'sample_rate':16000,  #Frecuencia de muestreo los archivos de audio Hz
 
@@ -257,7 +286,7 @@ if __name__ == '__main__':
                                            mean_abs_amp_norm=wav_cfg_d['mean_abs_amp_norm'],
                                            clip_output=wav_cfg_d['clip_output'])
         
-        y_wav_true, y_wav_pred = translate(mfcc, mel, stft, target_ds_cfg_d, t_s=1, t_e=12, output_path='./test_4', save_output=True)
+        y_wav_true, y_wav_pred = translate(decoder, mfcc, mel, stft, target_ds_cfg_d, t_s=0, t_e=6, output_path='./test_4', save_output=True)
 
 
 
