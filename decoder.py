@@ -185,17 +185,26 @@ class decoder_specs:
                 self.loss = self.mel_loss + self.stft_loss
 
         
-        self.summary_v += [tf.summary.scalar('dec_metric/mel_loss', self.mel_loss),
-                           tf.summary.scalar('dec_metric/stft_loss', self.stft_loss),
-                           tf.summary.scalar('dec_metric/loss', self.loss)]
+            self.summary_v += [tf.summary.scalar('dec_metric/mel_loss', self.mel_loss),
+                               tf.summary.scalar('dec_metric/stft_loss', self.stft_loss),
+                               tf.summary.scalar('dec_metric/loss', self.loss)]
 
-        tf_cmap = tf.constant(np.array(plt.get_cmap().colors), tf.float32)
 
-        stft_spec = tf.gather(tf_cmap, tf.transpose(tf.cast(tf.round(255*tf.concat([self.y_stft, self.target_stft], axis=-1)), tf.int32), perm=[0, 2, 1]))
-        mel_spec  = tf.gather(tf_cmap, tf.transpose(tf.cast(tf.round(255*tf.concat([self.y_mel,  self.target_mel],  axis=-1)), tf.int32), perm=[0, 2, 1]))
         
-        self.spec_summary_v += [ tf.summary.image('dec_metric/stft_spec', stft_spec, max_outputs=1),
-                                 tf.summary.image('dec_metric/mel_spec',  mel_spec,  max_outputs=1)]
+
+        with tf.variable_scope('specs', reuse=reuse):
+            tf_cmap = tf.constant(np.array(plt.get_cmap().colors), tf.float32)
+            spec_stft = tf.concat([self.y_stft, self.target_stft], axis=-1, name='spec_stft')
+            spec_mel  = tf.concat([self.y_mel,  self.target_mel],  axis=-1, name='spec_mel')
+
+            spec_stft_norm = (spec_stft - tf.reduce_min(spec_stft)) / (tf.reduce_max(spec_stft) - tf.reduce_min(spec_stft))
+            spec_mel_norm =  (spec_mel  - tf.reduce_min(spec_mel))  / (tf.reduce_max(spec_mel)  - tf.reduce_min(spec_mel))
+            
+            stft_spec = tf.gather(tf_cmap, tf.transpose(tf.cast(tf.round(255*spec_stft_norm), tf.int32), perm=[0, 2, 1]))
+            mel_spec  = tf.gather(tf_cmap, tf.transpose(tf.cast(tf.round(255*spec_mel_norm), tf.int32), perm=[0, 2, 1]))
+        
+            self.spec_summary_v += [ tf.summary.image('dec_metric/stft_spec', stft_spec, max_outputs=1),
+                                     tf.summary.image('dec_metric/mel_spec',  mel_spec,  max_outputs=1)]
         return None
 
 
@@ -348,23 +357,30 @@ class decoder_specs:
 
     
     def train(self):
-        self.cfg_d['n_samples_trn'] = self.ds.get_n_windows(self.cfg_d['ds_prop_val'])[0]
 
-        self.cfg_d['n_steps_epoch_trn'] = self.cfg_d['n_samples_trn']//self.cfg_d['batch_size']
-
+        add_pams = {}
+        if 'ds_filter_d' in self.cfg_d.keys():
+            add_pams['ds_filter_d'] = self.cfg_d['ds_filter_d']
+            
+        self.cfg_d['n_samples_trn'] = self.ds.get_n_windows(self.cfg_d['ds_prop_val'], **add_pams)[0]
+        
         self.sampler_trn = self.ds.spec_window_sampler(batch_size=self.cfg_d['batch_size'],
                                                        n_epochs=99999999,
                                                        randomize_samples=self.cfg_d['randomize_samples'],
                                                        sample_trn=True,
-                                                       prop_val=self.cfg_d['ds_prop_val'])
+                                                       prop_val=self.cfg_d['ds_prop_val'],
+                                                       **add_pams)
 
 
         self.sampler_val = self.ds.spec_window_sampler(batch_size=self.cfg_d['batch_size'],
                                                        n_epochs=99999999,
                                                        randomize_samples=self.cfg_d['randomize_samples'],
                                                        sample_trn=False,
-                                                       prop_val=self.cfg_d['ds_prop_val'])
+                                                       prop_val=self.cfg_d['ds_prop_val'],
+                                                       **add_pams)
 
+
+        self.cfg_d['n_steps_epoch_trn'] = self.cfg_d['n_samples_trn']//self.cfg_d['batch_size']
         self.iter_val  = iter(self.sampler_val)
         
         print(' Starting Training ...')
@@ -567,6 +583,7 @@ if __name__ == '__main__':
                    
                  'ds_prop_val':0.3,
                  'randomize_samples':True,
+                 'ds_filter_d':{'spk_id':'bdl'},
                    
                  'n_epochs':        99999,
                  'batch_size':        128,
