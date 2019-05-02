@@ -141,7 +141,8 @@ if __name__ == '__main__':
 
 
 ##    timit   = TIMIT(timit_ds_cfg_d)
-    trg_spk = TARGET_spk(target_ds_cfg_d)
+##    trg_spk = TARGET_spk(target_ds_cfg_d)
+    trg_spk = ARCTIC(target_ds_cfg_d)
 
     encoder = encoder_spec_phn(cfg_d=enc_cfg_d, ds=None)
 ##    encoder.eval_acc(timit.window_sampler(ds_filter_d={'ds_type':'TEST'}  ) )
@@ -151,7 +152,7 @@ if __name__ == '__main__':
     
 
     decoder = decoder_specs(cfg_d=dec_cfg_d, ds=None, encoder=encoder)
-    encoder.restore()
+##    encoder.restore()
     decoder.restore()
 
 
@@ -192,9 +193,10 @@ if __name__ == '__main__':
                 print('Press ENTER to continue: ', end=''); input()
                 
 
-    if 0:
+    if 1:
         print('TEST 2: trg_spk_mfcc to target_spk_wav')
-        mfcc, mel, stft = trg_spk.get_spec(20)
+        i = np.argwhere( trg_spk.get_ds_filter({'spk_id': 'bdl'}) ).T[0][10]
+        mfcc, mel, stft = trg_spk.get_spec(i)[:3]
         y_wav_true, y_wav_pred = translate(decoder, mfcc, mel, stft, target_ds_cfg_d, t_s=0, t_e=120, output_path='./test_2', save_output=True)
     
     if 0:
@@ -236,9 +238,9 @@ if __name__ == '__main__':
 
     if 1:
         print('TEST 4: other_spk_mfcc to target_spk_wav')
-        wav_path = '/media/sergio/EVO970/UNIR/TFM/dataset/VCTK-Corpus/VCTK-Corpus/wav48/p299/p299_005.wav'
+##        wav_path = '/media/sergio/EVO970/UNIR/TFM/dataset/VCTK-Corpus/VCTK-Corpus/wav48/p299/p299_005.wav'
 ##        wav_path = '/media/sergio/EVO970/UNIR/TFM/dataset/VCTK-Corpus/VCTK-Corpus/wav48/p374/p374_023.wav'
-##        wav_path = '/media/sergio/EVO970/UNIR/TFM/dataset/VCTK-Corpus/VCTK-Corpus/wav48/p339/p339_008.wav'
+        wav_path = '/media/sergio/EVO970/UNIR/TFM/dataset/VCTK-Corpus/VCTK-Corpus/wav48/p339/p339_008.wav'
 ##        wav_path = '/media/sergio/EVO970/UNIR/TFM/dataset/VCTK-Corpus/VCTK-Corpus/wav48/p267/p267_023.wav'
         wav_cfg_d = {'wav_path':wav_path,
                      'wav_norm':(0.0, 1.0),

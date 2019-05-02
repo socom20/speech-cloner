@@ -1,6 +1,6 @@
 __*
 *stats_dir
-*ckpt
+dec_ckpt
 *.txt
 hp
 test_*

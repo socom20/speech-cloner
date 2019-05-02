@@ -179,10 +179,15 @@ class decoder_specs:
  
             self.stft_loss = self.cfg_d['stft_loss_weight'] * tf.reduce_mean( tf.squared_difference( self.y_stft, self.target_stft ), name='stft_loss' )
 
-            if False:
+            if self.cfg_d['loss_type'] == 'log':
                 self.loss = tf.log(self.mel_loss) + tf.log(self.stft_loss)
-            else:
+                
+            elif self.cfg_d['loss_type'] == 'sum':
                 self.loss = self.mel_loss + self.stft_loss
+                
+            else:
+                raise Exception('- ERROR, _build_loss, loss_type not understood.')
+                
 
         
             self.summary_v += [tf.summary.scalar('dec_metric/mel_loss', self.mel_loss),
@@ -513,7 +518,7 @@ if __name__ == '__main__':
     if os.name == 'nt':
         ds_path = r'G:\Downloads\ARCTIC\cmu_arctic'
     else:
-        ds_path = '/media/sergio/EVO970/UNIR/TFM/code/data_sets/ARCTIC/cmu_arctic'
+        ds_path = '../data_sets/ARCTIC/cmu_arctic'
 
     target_ds_cfg_d = {'ds_path':ds_path,
                        'ds_norm':(0.0, 1.0),
@@ -580,14 +585,15 @@ if __name__ == '__main__':
 
                  'mel_loss_weight': 400,
                  'stft_loss_weight':400,
+                 'loss_type': 'log',
                    
-                 'ds_prop_val':0.3,
+                 'ds_prop_val':0.1,
                  'randomize_samples':True,
-                 'ds_filter_d':{'spk_id':'bdl'},
+                 'ds_filter_d':{'spk_id': 'bdl'},
                    
                  'n_epochs':        99999,
-                 'batch_size':        128,
-                 'val_batch_size':    128,
+                 'batch_size':        32,
+                 'val_batch_size':    32,
                  'save_each_n_epochs':  5,
 
                  'log_dir':   './dec_stats_dir',
