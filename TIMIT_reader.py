@@ -2,16 +2,17 @@ import numpy as np
 import matplotlib.pyplot as plt
 import os, sys
 import librosa
-import sounddevice as sd
 import pickle
 import hashlib
 
 import h5py
-import math
 
 from audio_lib import calc_MFCC_input, calc_PHN_target
+from sound_ds import Sound_DS
 
-class TIMIT:
+
+
+class TIMIT(Sound_DS):
     def __init__(self, cfg_d={}):
 
         self.cfg_d = cfg_d
@@ -107,8 +108,10 @@ class TIMIT:
 
 
         
-        self.phn_mfcc_cache_name = '.'.join(cfg_d['phn_mfcc_cache_name'].split('.')[:-1]) + '_' + phn_mfcc_name_id + '.' + cfg_d['phn_mfcc_cache_name'].split('.')[-1]
+        self.spec_cache_name = '.'.join(cfg_d['phn_mfcc_cache_name'].split('.')[:-1]) + '_' + phn_mfcc_name_id + '.' + cfg_d['phn_mfcc_cache_name'].split('.')[-1]
+        self.spec_cache_name     = self.spec_cache_name
 
+        
         self.ds = None
         if not os.path.exists( os.path.join(self.ds_path, self.ds_cache_name) ) or cfg_d['remake_samples_cache']:
             self.read_dataset_from_disk(self.verbose)        
@@ -117,15 +120,15 @@ class TIMIT:
             self.load_dataset_cache()
 
 
-        self.normalize_ds()
+        self._normalize_ds()
 
         self.make_phoneme_convertion_dicts()
 
 
-        if not os.path.exists(os.path.join(self.ds_path, self.phn_mfcc_cache_name)):
+        if not os.path.exists(os.path.join(self.ds_path, self.spec_cache_name)):
             r = ''
             while not r in ['y', 'n']:
-                print(' - TIMIT, no se encontr´o el archivo de cache "{}", desea construirlo (y/n):'.format(self.phn_mfcc_cache_name), end='')
+                print(' - TIMIT, no se encontr´o el archivo de cache "{}", desea construirlo (y/n):'.format(self.spec_cache_name), end='')
                 r = input()
             if r == 'y':
                 self.create_phn_mfcc_cache()
@@ -137,14 +140,6 @@ class TIMIT:
 
 
 
-    def normalize_ds(self):
-        if self.verbose:
-            print(' - TIMIT, normalize_ds: Normalizando ondas con: add={:0.02f}  mult={:0.02f}'.format(*self.ds_norm))
-            
-        for i in range(len(self.ds['wav'])):
-            self.ds['wav'][i] = self.ds_norm[1] * (self.ds['wav'][i] + self.ds_norm[0])
-
-        return None
 
     def create_phn_mfcc_cache(self, cfg_d=None):
 
@@ -152,7 +147,7 @@ class TIMIT:
             cfg_d = self.cfg_d
 
 
-        if os.path.exists(os.path.join(self.ds_path, self.phn_mfcc_cache_name)):
+        if os.path.exists(os.path.join(self.ds_path, self.spec_cache_name)):
             print(' WARNING, create_phn_mfcc_cache: el archivo "{}" ya existe, para generarlo de nuevo primero se debe eliminar.', file=sys.stderr)
             return None
         
@@ -160,9 +155,9 @@ class TIMIT:
         n_samples  = len(self.ds['wav'])
 
 
-        print(' - create_phn_mfcc_cache, Salvando {} cache'.format(self.phn_mfcc_cache_name))
+        print(' - create_phn_mfcc_cache, Salvando {} cache'.format(self.spec_cache_name))
         
-        with h5py.File(os.path.join(self.ds_path, self.phn_mfcc_cache_name),'w') as ds_h5py:
+        with h5py.File(os.path.join(self.ds_path, self.spec_cache_name),'w') as ds_h5py:
 
             grp_input_mfcc = ds_h5py.create_group("input_mfcc")
             grp_target_phn = ds_h5py.create_group("target_phn")
@@ -202,7 +197,7 @@ class TIMIT:
 
 ##
         if self.verbose:
-            print('Archivo "{}" escrito en disco.'.format(self.phn_mfcc_cache_name))
+            print('Archivo "{}" escrito en disco.'.format(self.spec_cache_name))
                 
 ##                ds_h5py['input_mfcc'][i_sample] = mfcc
 ##                ds_h5py['target_phn'][i_sample] = phn
@@ -210,31 +205,7 @@ class TIMIT:
         return None
         
         
-    def save_dataset_cache(self):
-        if self.verbose:
-            print(' - TIMIT, save_dataset_cache: Salvando Archivo de cache: "{}"'.format(self.ds_cache_name))
 
-        with open(os.path.join(self.ds_path, self.ds_cache_name), 'wb') as f:
-            pickle.dump(self.ds, f)
-
-        if self.verbose:
-            print(' - TIMIT, save_dataset_cache: OK !')
-            
-        return None
-            
-
-    def load_dataset_cache(self):
-        if self.verbose:
-            print(' - TIMIT, load_dataset_cache: Leyendo Archivo de cache: "{}"'.format(self.ds_cache_name))
-
-        with open(os.path.join(self.ds_path, self.ds_cache_name), 'rb') as f:
-            self.ds = pickle.load(f)
-
-
-        if self.verbose:
-            print(' - TIMIT, load_dataset_cache: OK !')
-
-        return None
 
     def conv_61phn_to_39phn(self, phn61_v):
         ret = (phn61_v@self.phn_61to39_conv_matix)
@@ -345,27 +316,6 @@ class TIMIT:
         return txt_v
 
 
-    def stop(self):
-        sd.stop()
-        return None
-
-    
-    def play(self, wave, blocking=False):
-        sd.play(np.concatenate([np.zeros(1000),wave]), self.sample_rate, blocking=blocking,loop=False)
-        return None
-
-
-    def get_ds_from_spk_id(self, skp_id='HIT0'):
-        skp_id = skp_id.upper()
-        ds_spk = {}
-        
-        f = (self.ds['spk_id'] == skp_id)
-        for k in self.ds.keys():
-            ds_spk[k] = self.ds[k][f]
-
-        return ds_spk
-
-
     def get_ds_from_ds_type(self, ds_type='TRAIN'):
         if ds_type not in self.ds_type_v:
             raise Exception(' - ERROR TIMIT, phoneme_sampler, ds_type no reconocido')
@@ -440,23 +390,7 @@ class TIMIT:
                         y_v = []
                         yield x_v_, y_v_
 
-    def get_ds_filter(self, ds_filter={'ds_type':'TRAIN'}):
-        f = np.ones(self.ds['wav'].shape[0], dtype=np.bool)
-
-        for c, v in ds_filter.items():
-            if v is None:
-                continue
-            
-            if c not in self.ds.keys():
-                raise Exception(' - ERROR, get_ds_fillter: campo "{}" no encontrado en el ds'.format(c))
-            
-            f = (self.ds[c] == v) * f
-
-        if f.sum() == 0:
-                print('WARNING, no se selecciona ningun dato. Revisar campos de filtrado', file=sys.stderr)
-        
-        return f
-
+    
     
     def frame_sampler(self, batch_size=32, n_epochs=1, randomize_samples=True, ds_filter_d={'ds_type':'TRAIN'}):
         
@@ -465,7 +399,7 @@ class TIMIT:
         samples_v = [str(i) for i in samples_v]
         
 
-        with h5py.File(os.path.join(self.ds_path, self.phn_mfcc_cache_name),'r') as ds_h5py:
+        with h5py.File(os.path.join(self.ds_path, self.spec_cache_name),'r') as ds_h5py:
             for i_epoch in range(n_epochs):
                 if randomize_samples:
                     np.random.shuffle(samples_v)
@@ -497,7 +431,7 @@ class TIMIT:
         samples_v = [str(i) for i in samples_v]
         
 
-        with h5py.File(os.path.join(self.ds_path, self.phn_mfcc_cache_name),'r') as ds_h5py:
+        with h5py.File(os.path.join(self.ds_path, self.spec_cache_name),'r') as ds_h5py:
             x_v = []
             y_v = []
 
@@ -542,47 +476,7 @@ class TIMIT:
                         idxs_v = []
                             
 
-    def spec_show(self, spec, phn_v=None, idxs_v=None, aspect_ratio=3, cmap=None):
-        
-        m = spec
-
-        n_repeat = m.shape[0] // m.shape[1] // int(aspect_ratio)
-        if n_repeat > 1:
-            m_repeat = np.repeat(m, n_repeat, axis=1).T
-        else:
-            m_repeat = m.T
-        
-        f, ax = plt.subplots(1,1, figsize=(aspect_ratio*5, 5))
-        n = ax.imshow(m_repeat, cmap=cmap)
-        cbar = f.colorbar(n)
-
-        if phn_v is not None:
-            last_i = 0
-            print_up = True
-            for i in range(phn_v.shape[0]-1):
-                if (phn_v[i] != phn_v[i+1]).any() or i == phn_v.shape[0]-2:
-                    if i != phn_v.shape[0]-2:
-                        ax.plot([i+1, i+1], [0, m_repeat.shape[0]-1], 'y-')
-                    
-                    h = (0.85 if print_up else 0.95)*m_repeat.shape[0] 
-
-                    ax.text(0.5*(i+last_i), h, self.idx2phn[np.argmax(phn_v[i])], horizontalalignment='center', color='r')
-                    last_i = i
-                    print_up = not print_up
-
-        if idxs_v is not None:
-            i_s, i_e, i_sample = idxs_v
-            step   = self.cfg_d['hop_length']
-            y_wave = self.ds['wav'][i_sample][step*i_s:step*i_e]
-            x_wave = np.arange(-0.5, (i_e-i_s)-0.5, 1/step)
-            
-            h = m_repeat.shape[0]
-            y_wave_morm = 0.5* h * ((y_wave-y_wave.min())/(y_wave.max()-y_wave.min()) - 0.5) + h/2
-            plt.plot(x_wave, y_wave_morm,  'b', alpha=0.5)
-        
-        plt.show()
-
-        return None
+ 
 
     
     def calc_class_weights(self, clip=(0,10), ds_filter_d={'ds_type':'TRAIN'}):
@@ -592,7 +486,7 @@ class TIMIT:
         samples_v = [str(i) for i in samples_v]
 
         counter_v = None
-        with h5py.File(os.path.join(self.ds_path, self.phn_mfcc_cache_name),'r') as ds_h5py:
+        with h5py.File(os.path.join(self.ds_path, self.spec_cache_name),'r') as ds_h5py:
             for i_s in samples_v:
                 if counter_v is None:
                     counter_v = np.sum(ds_h5py['target_phn'][str(i_s)], axis=0)

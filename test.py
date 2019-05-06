@@ -193,7 +193,7 @@ if __name__ == '__main__':
                 print('Press ENTER to continue: ', end=''); input()
                 
 
-    if 1:
+    if 0:
         print('TEST 2: trg_spk_mfcc to target_spk_wav')
         i = np.argwhere( trg_spk.get_ds_filter({'spk_id': 'bdl'}) ).T[0][10]
         mfcc, mel, stft = trg_spk.get_spec(i)[:3]
@@ -240,8 +240,21 @@ if __name__ == '__main__':
         print('TEST 4: other_spk_mfcc to target_spk_wav')
 ##        wav_path = '/media/sergio/EVO970/UNIR/TFM/dataset/VCTK-Corpus/VCTK-Corpus/wav48/p299/p299_005.wav'
 ##        wav_path = '/media/sergio/EVO970/UNIR/TFM/dataset/VCTK-Corpus/VCTK-Corpus/wav48/p374/p374_023.wav'
-        wav_path = '/media/sergio/EVO970/UNIR/TFM/dataset/VCTK-Corpus/VCTK-Corpus/wav48/p339/p339_008.wav'
+##        wav_path = '/media/sergio/EVO970/UNIR/TFM/dataset/VCTK-Corpus/VCTK-Corpus/wav48/p339/p339_008.wav'
 ##        wav_path = '/media/sergio/EVO970/UNIR/TFM/dataset/VCTK-Corpus/VCTK-Corpus/wav48/p267/p267_023.wav'
+
+##        wav_path = '/media/sergio/EVO970/UNIR/TFM/dataset/VCTK-Corpus/VCTK-Corpus/wav48/p234/p234_020.wav'
+
+##        wav_path = '/media/sergio/EVO970/UNIR/TFM/code/data_sets/ARCTIC/cmu_arctic/cmu_us_slt_arctic/wav/arctic_a0011.wav'
+        wav_path = '/media/sergio/EVO970/UNIR/TFM/code/data_sets/ARCTIC/cmu_arctic/cmu_us_rms_arctic/wav/arctic_a0011.wav'
+##        wav_path = '/media/sergio/EVO970/UNIR/TFM/code/data_sets/ARCTIC/cmu_arctic/cmu_us_ksp_arctic/wav/arctic_a0011.wav'
+##        wav_path = '/media/sergio/EVO970/UNIR/TFM/code/data_sets/ARCTIC/cmu_arctic/cmu_us_jmk_arctic/wav/arctic_a0011.wav'
+##        wav_path = '/media/sergio/EVO970/UNIR/TFM/code/data_sets/ARCTIC/cmu_arctic/cmu_us_clb_arctic/wav/arctic_a0011.wav'
+##        wav_path = '/media/sergio/EVO970/UNIR/TFM/code/data_sets/ARCTIC/cmu_arctic/cmu_us_bdl_arctic/wav/arctic_a0011.wav'  # Target
+
+##        wav_path = '../sergio.ogg'
+
+        
         wav_cfg_d = {'wav_path':wav_path,
                      'wav_norm':(0.0, 1.0),
                      'sample_rate':16000,  #Frecuencia de muestreo los archivos de audio Hz

@@ -85,16 +85,22 @@ class decoder_specs:
         with tf.variable_scope(self.cfg_d['model_name'], reuse=reuse):
             if self.encoder is None:
                 self.inputs = tf.placeholder(tf.float32, (None,)+tuple(self.cfg_d['input_shape']), name='inputs')
-                inputs = self.inputs
+                dec_inputs  = self.inputs
             else:
                 self.inputs = self.encoder.get_input()
-
-                enc_o = self.encoder.get_outputs()
-                inputs = enc_o.y_pred  # Usamos softmax que tiene menos informacion del hablante.
-                 
-                assert self.encoder.y_logits.shape.as_list()[1:] == list(self.cfg_d['input_shape']), 'ERROR, input_shape no coincide con la dimensión de salida del encoder.'
                 
+                enc_o      = self.encoder.get_outputs()
+                dec_inputs = enc_o.y_pred  # Usamos softmax(y_pred) que tiene menos informacion del hablante.
 
+                assert self.encoder.y_logits.shape.as_list()[1:] == list(self.cfg_d['input_shape']), 'ERROR, input_shape no coincide con la dimensión de salida del encoder.'
+
+                
+            # Solamente recuperamos el maximo
+            if False:
+                dec_inputs_oh = tf.one_hot( indices=tf.argmax(dec_inputs, axis=-1), depth=dec_inputs.shape[-1].value, axis=-1, name='dec_inputs_oh')
+                dec_inputs    = dec_inputs_oh
+
+                    
             with tf.variable_scope('step1', reuse=reuse): # self.cfg_d['steps_v'][0]['']  self.cfg_d['']
                 step_d = self.cfg_d['steps_v'][0]
                 
@@ -104,7 +110,7 @@ class decoder_specs:
                     embed_size = step_d['embed_size']
 
                 # Encoder pre-net
-                prenet_out = prenet(inputs=inputs,
+                prenet_out = prenet(inputs=dec_inputs,
                                     num_units=None,
                                     embed_size=embed_size,
                                     dropout_rate=self.cfg_d['dropout_rate'],
@@ -123,8 +129,6 @@ class decoder_specs:
                                 use_CudnnGRU=self.cfg_d['use_CudnnGRU'],
                                 reuse=reuse) # (N, T_x, E)
 
-
-
                 
                 self.y_mel      = tf.layers.dense(CBHG_out, step_d['n_output'], activation=None, name="y_logits")                       # (N, T_x, n_mel)
                 self.target_mel = tf.placeholder(tf.float32, (None, self.cfg_d['input_shape'][0], step_d['n_output']), name='target' )  # (N, T_x, n_mel)
@@ -139,8 +143,9 @@ class decoder_specs:
                     embed_size = step_d['embed_size']
 
 
-                if False:
-                    inputs_step2 = tf.concat([CBHG_out, self.inputs], axis=-1)
+                    
+                if True:
+                    inputs_step2 = tf.concat([CBHG_out, dec_inputs], axis=-1)
                 else:
                     inputs_step2 = CBHG_out
                 
@@ -562,9 +567,9 @@ if __name__ == '__main__':
                    
                  'input_shape':(enc_cfg_d['input_shape'][0], enc_cfg_d['n_output']),
                  
-                 'steps_v':[{'embed_size':256, # Para la prenet. Se puede aumentar la dimension. None (usa la cantidad n_mfcc)
-                             'num_conv_banks':16,
-                             'num_highwaynet_blocks':8,
+                 'steps_v':[{'embed_size':128, # Para la prenet. Se puede aumentar la dimension. None (usa la cantidad n_mfcc)
+                             'num_conv_banks':8,
+                             'num_highwaynet_blocks':4,
                              'n_output':target_ds_cfg_d['n_mels']},
                             
                             {'embed_size':256, # Para la prenet. Se puede aumentar la dimension. None (usa la cantidad n_mfcc)
@@ -594,7 +599,7 @@ if __name__ == '__main__':
                  'n_epochs':        99999,
                  'batch_size':        32,
                  'val_batch_size':    32,
-                 'save_each_n_epochs':  5,
+                 'save_each_n_epochs': 10,
 
                  'log_dir':   './dec_stats_dir',
                  'model_path':'./dec_ckpt'}

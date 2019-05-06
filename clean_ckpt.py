@@ -14,8 +14,8 @@ def remove_group(i, files_v, folder_name, ext_v):
 if __name__ == '__main__':
     folder_name = './dec_ckpt'
     ext_v = ['.data-00000-of-00001', '.index', '.meta']
-    step_min = 5000
-    n_saves  = 200
+    step_min = 10000
+    n_saves  = 100
 
 
     print(' Cleaning:', folder_name)

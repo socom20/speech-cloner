@@ -2,5 +2,4 @@ __*
 *stats_dir
 dec_ckpt
 *.txt
-hp
 test_*

@@ -2,7 +2,6 @@ import numpy as np
 import matplotlib.pyplot as plt
 import os, sys
 import librosa
-import sounddevice as sd
 import pickle
 import hashlib
 
@@ -10,10 +9,10 @@ import h5py
 from collections import namedtuple
 
 from audio_lib import calc_MFCC_input, calc_PHN_target
+from sound_ds import Sound_DS
 
 
-
-class ARCTIC:
+class ARCTIC(Sound_DS):
     def __init__(self, cfg_d={}):
 
         self.cfg_d = cfg_d
@@ -87,7 +86,7 @@ class ARCTIC:
             self.load_dataset_cache()
 
 
-        self.normalize_ds()
+        self._normalize_ds()
 
         self.make_phoneme_convertion_dicts()
 
@@ -106,15 +105,6 @@ class ARCTIC:
         return None
 
 
-
-    def normalize_ds(self):
-        if self.verbose:
-            print(' - ARCTIC, normalize_ds: Normalizando ondas con: add={:0.02f}  mult={:0.02f}'.format(*self.ds_norm))
-            
-        for i in range(len(self.ds['wav'])):
-            self.ds['wav'][i] = self.ds_norm[1] * (self.ds['wav'][i] + self.ds_norm[0])
-
-        return None
 
     def create_spec_cache(self, cfg_d=None):
 
@@ -184,31 +174,7 @@ class ARCTIC:
             
         return None
         
-        
-    def save_dataset_cache(self):
-        if self.verbose:
-            print(' - ARCTIC, save_dataset_cache: Salvando Archivo de cache: "{}"'.format(self.ds_cache_name))
 
-        with open(os.path.join(self.ds_path, self.ds_cache_name), 'wb') as f:
-            pickle.dump(self.ds, f)
-
-        if self.verbose:
-            print(' - ARCTIC, save_dataset_cache: OK !')
-            
-        return None
-            
-
-    def load_dataset_cache(self):
-        if self.verbose:
-            print(' - ARCTIC, load_dataset_cache: Leyendo Archivo de cache: "{}"'.format(self.ds_cache_name))
-
-        with open(os.path.join(self.ds_path, self.ds_cache_name), 'rb') as f:
-            self.ds = pickle.load(f)
-
-        if self.verbose:
-            print(' - ARCTIC, load_dataset_cache: OK !')
-
-        return None
                 
 
             
@@ -282,15 +248,6 @@ class ARCTIC:
         return phn_v
 
 
-    def stop(self):
-        sd.stop()
-        return None
-
-    
-    def play(self, wave, blocking=False):
-        sd.play(np.concatenate([np.zeros(1000),wave]), self.sample_rate, blocking=blocking,loop=False)
-        return None
-
 
     def make_phoneme_convertion_dicts(self):
         """ Arma los diccionarios de conversión de phonemes según la agrupación que se quiera usar"""
@@ -311,48 +268,9 @@ class ARCTIC:
     
         return None
 
-    def get_n_windows(self, prop_val=0.3, ds_filter_d={'spk_id':['bdl','rms','slt','clb']}):
-        f_s = self.get_ds_filter(ds_filter_d)
-        
-        n_windows     = sum([self.ds['wav'][i].shape[0] // (self.cfg_d['hop_length'] * self.cfg_d['n_timesteps']) for i in range(self.ds['wav'][f_s].shape[0])])
-        n_windows_trn = int((1-prop_val)*n_windows)
-        n_windows_val = n_windows - n_windows_trn
-        
-        return n_windows_trn, n_windows_val
     
 
-    def get_ds_filter(self, ds_filter_d={'spk_id':['bdl','rms','slt','clb']}):
-        f = np.ones(self.ds['wav'].shape[0], dtype=np.bool)
-
-        for c, v in ds_filter_d.items():
-            if c not in self.ds.keys():
-                raise Exception(' - ERROR, get_ds_fillter: campo "{}" no encontrado en el ds'.format(c))
-            
-            if v is None:
-                continue
-
-            v_v = v if type(v) in (list, tuple) else [v]                
-            p_f = np.zeros_like(f) # partial filter
-            for v in v_v:
-                p_f = p_f + (self.ds[c] == v)  # or
-
-            f = f * p_f  # and
-
-        if f.sum() == 0:
-            print('WARNING, no se selecciona ningun dato. Revisar campos de filtrado', file=sys.stderr)
-        
-        return f
-
-    def get_spec(self, i_sample):
-        
-        with h5py.File(os.path.join(self.ds_path, self.spec_cache_name), 'r') as ds_h5py:
-            mfcc     = ds_h5py["mfcc"][str(i_sample)][:]
-            mel_dB   = ds_h5py["mel_dB"][str(i_sample)][:]
-            power_dB = ds_h5py["power_dB"][str(i_sample)][:]
-            phn      = ds_h5py["phn"][str(i_sample)][:]
-
-        ret_nt = namedtuple('ret', 'mfcc mel_dB power_dB phn')
-        return ret_nt(mfcc, mel_dB, power_dB, phn)
+    
     
 
     def spec_window_sampler(self, batch_size=32, n_epochs=1, randomize_samples=True, sample_trn=True, prop_val=0.3, ds_filter_d={'spk_id':['bdl','rms','slt','clb']}, yield_idxs=False):
@@ -507,47 +425,7 @@ class ARCTIC:
                         idxs_v = []
                             
 
-    def spec_show(self, spec, phn_v=None, idxs_v=None, aspect_ratio=3, cmap=None):
-        
-        m = spec
-
-        n_repeat = m.shape[0] // m.shape[1] // int(aspect_ratio)
-        if n_repeat > 1:
-            m_repeat = np.repeat(m, n_repeat, axis=1).T
-        else:
-            m_repeat = m.T
-        
-        f, ax = plt.subplots(1,1, figsize=(aspect_ratio*5, 5))
-        n = ax.imshow(m_repeat, cmap=cmap)
-        cbar = f.colorbar(n)
-
-        if phn_v is not None:
-            last_i = 0
-            print_up = True
-            for i in range(phn_v.shape[0]-1):
-                if (phn_v[i] != phn_v[i+1]).any() or i == phn_v.shape[0]-2:
-                    if i != phn_v.shape[0]-2:
-                        ax.plot([i+1, i+1], [0, m_repeat.shape[0]-1], 'y-')
-                    
-                    h = (0.85 if print_up else 0.95)*m_repeat.shape[0] 
-
-                    ax.text(0.5*(i+last_i), h, self.idx2phn[np.argmax(phn_v[i])], horizontalalignment='center', color='r')
-                    last_i = i
-                    print_up = not print_up
-
-        if idxs_v is not None:
-            i_s, i_e, i_sample = idxs_v
-            step   = self.cfg_d['hop_length']
-            y_wave = self.ds['wav'][i_sample][step*i_s:step*i_e]
-            x_wave = np.arange(-0.5, (i_e-i_s)-0.5, 1/step)
-            
-            h = m_repeat.shape[0]
-            y_wave_morm = 0.5* h * ((y_wave-y_wave.min())/(y_wave.max()-y_wave.min()) - 0.5) + h/2
-            plt.plot(x_wave, y_wave_morm,  'b', alpha=0.5)
-        
-        plt.show()
-
-        return None
+    
 
     
     def calc_class_weights(self, clip=(0,10), ds_filter_d={'spk_id':['bdl','rms','slt','clb']}):
