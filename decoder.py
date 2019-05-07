@@ -622,12 +622,14 @@ if __name__ == '__main__':
     encoder.restore()
     
     # Restauro entrenamiento pausado
-##    decoder.restore()
+    decoder.restore()
+    
 ##    # -------- Asigno nuevo lr_decay, lr_start --------
 ##    decoder.run(tf.assign(decoder.learning_rate_start, dec_cfg_d['learning_rate']))
 ##    decoder.run(tf.assign(decoder.learning_rate_decay, dec_cfg_d['decay']))
 ##    decoder.run(decoder.lr_decay_op)
 ##    # -------------------------------------------------
+    
     decoder.train()
 
 

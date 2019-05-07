@@ -95,6 +95,12 @@ class Sound_DS():
             step   = self.cfg_d['hop_length']
             y_wave = self.ds['wav'][i_sample][step*i_s:step*i_e]
             x_wave = np.arange(-0.5, (i_e-i_s)-0.5, 1/step)
+
+            if y_wave.shape[0] < x_wave.shape[0]:
+                print(' WARNING, spec_show: padding y_wave !!')
+                pad_len = x_wave.shape[0] - y_wave.shape[0]
+                y_wave  = np.concatenate( [y_wave, np.zeros(pad_len, dtype=y_wave.dtype)] ) 
+                
             
             h = m_repeat.shape[0]
             y_wave_morm = 0.5* h * ((y_wave-y_wave.min())/(y_wave.max()-y_wave.min()) - 0.5) + h/2

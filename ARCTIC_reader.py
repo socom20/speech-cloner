@@ -271,6 +271,14 @@ class ARCTIC(Sound_DS):
     
 
     
+    def _zero_pad(self, *to_pad, pad_len=10):
+        ret_v = []
+        for spec in to_pad:
+            spec_padded = np.concatenate( [spec, np.zeros( (pad_len, spec.shape[1]) )], axis=0 )
+            
+            ret_v.append(spec_padded)
+
+        return ret_v
     
 
     def spec_window_sampler(self, batch_size=32, n_epochs=1, randomize_samples=True, sample_trn=True, prop_val=0.3, ds_filter_d={'spk_id':['bdl','rms','slt','clb']}, yield_idxs=False):
@@ -310,19 +318,34 @@ class ARCTIC(Sound_DS):
                 
                 for i_sample in samples_v:
                     spec_len = ds_h5py['mfcc'][i_sample].shape[0]
-                    if spec_len <= n_timesteps:
-                        if n_warning < 10:
-                            print('WARNING: sample {} has spec_len <= n_timesteps'.format(i_sample))
-                        n_warning += 1
-                        continue
-
-                    # Solamente elegimos un frame por wav
-                    i_s = np.random.randint(0, spec_len-n_timesteps)
-                    i_e = i_s + n_timesteps
                     
-                    mfcc     = ds_h5py["mfcc"][i_sample][i_s:i_e]
-                    mel_dB   = ds_h5py["mel_dB"][i_sample][i_s:i_e]
-                    power_dB = ds_h5py["power_dB"][i_sample][i_s:i_e]
+                    if spec_len <= n_timesteps:
+                        # Padding
+                        i_s = 0
+                        i_e = n_timesteps
+                        
+                        mfcc     = ds_h5py["mfcc"][i_sample][:]
+                        mel_dB   = ds_h5py["mel_dB"][i_sample][:]
+                        power_dB = ds_h5py["power_dB"][i_sample][:]
+                        
+                        pad_len = n_timesteps - spec_len
+
+                        mfcc, mel_dB, power_dB = self._zero_pad(mfcc, mel_dB, power_dB, pad_len=pad_len)
+                        
+                        if n_warning < 5:
+                            print('WARNING: padding!!!'.format(i_sample))
+                            n_warning += 1
+
+                    else:
+                        # Solamente elegimos un frame por wav
+                        i_s = np.random.randint(0, spec_len-n_timesteps)
+                        i_e = i_s + n_timesteps
+                        
+                        mfcc     = ds_h5py["mfcc"][i_sample][i_s:i_e]
+                        mel_dB   = ds_h5py["mel_dB"][i_sample][i_s:i_e]
+                        power_dB = ds_h5py["power_dB"][i_sample][i_s:i_e]
+
+
 
                     mfcc_v.append( mfcc )
                     mel_dB_v.append( mel_dB )
@@ -392,18 +415,34 @@ class ARCTIC(Sound_DS):
 
                     spec_len = ds_h5py['mfcc'][i_sample].shape[0]
                     if spec_len <= n_timesteps:
-                        if n_warning < 10:
-                            print('WARNING: sample {} has spec_len <= n_timesteps'.format(i_sample))
-                        n_warning += 1
-                        continue
-                    
-                    # Solamente elegimos un frame por wav
-                    # TODO: llevar la cuenta de los frames elegidos como i_sample asi siempre elegimos uno distinto
-                    i_s = np.random.randint(0, spec_len-n_timesteps)
-                    i_e = i_s + n_timesteps
-                    
-                    mfcc = ds_h5py['mfcc'][i_sample][i_s:i_e]
-                    phn  = ds_h5py['phn'][i_sample][i_s:i_e]
+                        # Padding
+                        i_s = 0
+                        i_e = n_timesteps
+                        
+                        mfcc = ds_h5py['mfcc'][i_sample][:]
+                        phn  = ds_h5py['phn'][i_sample][:]
+                        
+                        pad_len = n_timesteps - spec_len
+
+                        mfcc, phn = self._zero_pad(mfcc, phn, pad_len=pad_len)
+
+                        # Makeing phoneme target
+                        idx = arctic.phn2idx['pau']
+                        phn[-pad_len:,idx] = 1.0
+                        
+                        if n_warning < 5:
+                            print('WARNING: padding!!!'.format(i_sample))
+                            n_warning += 1
+
+                    else:
+                        
+                        # Solamente elegimos un frame por wav
+                        # TODO: llevar la cuenta de los frames elegidos como i_sample asi siempre elegimos uno distinto
+                        i_s = np.random.randint(0, spec_len-n_timesteps)
+                        i_e = i_s + n_timesteps
+                        
+                        mfcc = ds_h5py['mfcc'][i_sample][i_s:i_e]
+                        phn  = ds_h5py['phn'][i_sample][i_s:i_e]
 
                     x_v.append( mfcc )
                     y_v.append( phn )
@@ -469,7 +508,7 @@ if __name__ == '__main__':
     ds_cfg_d = {'ds_path':ds_path,
                 'ds_norm':(0.0, 1.0),
                 'remake_samples_cache':False,
-                'random_seed':None,
+                'random_seed':0,
                 'ds_cache_name':'arctic_cache.pickle',
                 'spec_cache_name':'spec_cache.h5py',
                 'verbose':True,
@@ -500,17 +539,16 @@ if __name__ == '__main__':
 
     arctic = ARCTIC(ds_cfg_d)
 
-    
-    mfcc_batch, phn_v_batch, idxs_v_batch = next(iter(arctic.window_sampler(128,1, yield_idxs=True, ds_filter_d={'spk_id':'bdl'})))
-    for mfcc, phn_v, idxs_v in zip(mfcc_batch, phn_v_batch, idxs_v_batch):
-##        print(idxs_v)
-        arctic.spec_show(mfcc, phn_v, idxs_v)
+##    mfcc_batch, phn_v_batch, idxs_v_batch = next(iter(arctic.window_sampler(10, 1, yield_idxs=True, ds_filter_d={'spk_id':'bdl'})))
+##    for mfcc, phn_v, idxs_v in zip(mfcc_batch, phn_v_batch, idxs_v_batch):
+####        print(idxs_v)
+##        arctic.spec_show(mfcc, phn_v, idxs_v)
 
 
-##    mfcc_batch, mel_batch, stft_batch, idxs_v_batch = next(iter(arctic.spec_window_sampler(50,1, yield_idxs=True)))
-##    for mfcc, mel, stft, idxs_v in zip(mfcc_batch, mel_batch, stft_batch, idxs_v_batch):
-##        print(idxs_v)
-##        arctic.spec_show(mfcc, None, idxs_v)
+    mfcc_batch, mel_batch, stft_batch, idxs_v_batch = next(iter(arctic.spec_window_sampler(50,1, yield_idxs=True)))
+    for mfcc, mel, stft, idxs_v in zip(mfcc_batch, mel_batch, stft_batch, idxs_v_batch):
+        print(idxs_v)
+        arctic.spec_show(stft, None, idxs_v)
         
         
 

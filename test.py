@@ -111,11 +111,6 @@ def translate(decoder, mfcc, mel, stft, cfg_d, t_s=5, t_e=60, n_iter=200, output
                                    n_fft=cfg_d['n_fft'])
 
 
-    input('ENTER for play y_wav_true: ')
-    sd.play(y_wav_true, cfg_d['sample_rate'], blocking=True)
-    input('ENTER for play y_wav_pred: ')
-    sd.play(y_wav_pred, cfg_d['sample_rate'], blocking=True)
-
     if save_output:
         print('Salvando salida')
         if not os.path.exists(output_path):
@@ -124,6 +119,11 @@ def translate(decoder, mfcc, mel, stft, cfg_d, t_s=5, t_e=60, n_iter=200, output
         librosa.output.write_wav(output_path+'/y_wav_true.wav', y_wav_true, cfg_d['sample_rate'], norm=True)
         librosa.output.write_wav(output_path+'/y_wav_pred.wav', y_wav_pred, cfg_d['sample_rate'], norm=True)
 
+    input('ENTER for play y_wav_true: ')
+    sd.play(y_wav_true, cfg_d['sample_rate'], blocking=True)
+    input('ENTER for play y_wav_pred: ')
+    sd.play(y_wav_pred, cfg_d['sample_rate'], blocking=True)
+    
     return y_wav_true, y_wav_pred
 
 
@@ -246,14 +246,16 @@ if __name__ == '__main__':
 ##        wav_path = '/media/sergio/EVO970/UNIR/TFM/dataset/VCTK-Corpus/VCTK-Corpus/wav48/p234/p234_020.wav'
 
 ##        wav_path = '/media/sergio/EVO970/UNIR/TFM/code/data_sets/ARCTIC/cmu_arctic/cmu_us_slt_arctic/wav/arctic_a0011.wav'
-        wav_path = '/media/sergio/EVO970/UNIR/TFM/code/data_sets/ARCTIC/cmu_arctic/cmu_us_rms_arctic/wav/arctic_a0011.wav'
+##        wav_path = '/media/sergio/EVO970/UNIR/TFM/code/data_sets/ARCTIC/cmu_arctic/cmu_us_rms_arctic/wav/arctic_a0011.wav'
 ##        wav_path = '/media/sergio/EVO970/UNIR/TFM/code/data_sets/ARCTIC/cmu_arctic/cmu_us_ksp_arctic/wav/arctic_a0011.wav'
 ##        wav_path = '/media/sergio/EVO970/UNIR/TFM/code/data_sets/ARCTIC/cmu_arctic/cmu_us_jmk_arctic/wav/arctic_a0011.wav'
-##        wav_path = '/media/sergio/EVO970/UNIR/TFM/code/data_sets/ARCTIC/cmu_arctic/cmu_us_clb_arctic/wav/arctic_a0011.wav'
+        wav_path = '/media/sergio/EVO970/UNIR/TFM/code/data_sets/ARCTIC/cmu_arctic/cmu_us_clb_arctic/wav/arctic_a0011.wav'
 ##        wav_path = '/media/sergio/EVO970/UNIR/TFM/code/data_sets/ARCTIC/cmu_arctic/cmu_us_bdl_arctic/wav/arctic_a0011.wav'  # Target
 
 ##        wav_path = '../sergio.ogg'
 
+
+##        wav_path = '/media/sergio/EVO970/UNIR/TFM/code/data_sets/TRG/L. Frank Baum/The Wonderful Wizard of Oz/The Wonderful Wizard of Oz-04 Chapter 4.mp3'
         
         wav_cfg_d = {'wav_path':wav_path,
                      'wav_norm':(0.0, 1.0),
@@ -301,7 +303,7 @@ if __name__ == '__main__':
                                            mean_abs_amp_norm=wav_cfg_d['mean_abs_amp_norm'],
                                            clip_output=wav_cfg_d['clip_output'])
         
-        y_wav_true, y_wav_pred = translate(decoder, mfcc, mel, stft, target_ds_cfg_d, t_s=0, t_e=6, output_path='./test_4', save_output=True)
+        y_wav_true, y_wav_pred = translate(decoder, mfcc, mel, stft, target_ds_cfg_d, t_s=0, t_e=52, output_path='./test_4', save_output=True)
 
 
 
