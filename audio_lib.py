@@ -283,7 +283,17 @@ def from_power_to_wav(P,
                       mean_abs_amp_norm=0.01,
                       n_iter=200,
                       n_fft=None,
+                      realse=1.0,
                       verbose=True):
+
+    # Hacemos P >= 0.0
+    P = np.maximum(0.0, P)
+    
+    if realse != 1.0:
+        p_mean = P.mean()
+        P      = P ** realse
+        
+        P = (p_mean / P.mean()) * P
     
     F = np.sqrt( librosa.core.db_to_power(P.T/P_dB_norm_factor - 80) )
     y_pe_rec = griffin_lim_alg(F, win_length, hop_length, num_iters=n_iter, n_fft=n_fft, verbose=verbose)
@@ -336,12 +346,13 @@ if __name__ == '__main__':
                               pre_emphasis=0.97,
                               hop_length=80,
                               win_length=400,
-                              mean_abs_amp_norm=0.01,
-                              n_iter=200,
+                              mean_abs_amp_norm=0.02,
+                              n_iter=50,
                               n_fft=None,
+                              realse=1.2,
                               verbose=True)
     
-    sd.play(y, 16000, blocking=True)
+##    sd.play(y, 16000, blocking=True)
     sd.play(y_rec, 16000, blocking=True)
     
     if 0:

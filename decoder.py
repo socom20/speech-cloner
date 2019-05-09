@@ -132,7 +132,7 @@ class decoder_specs:
                 
                 self.y_mel      = tf.layers.dense(CBHG_out, step_d['n_output'], activation=None, name="y_logits")                       # (N, T_x, n_mel)
                 self.target_mel = tf.placeholder(tf.float32, (None, self.cfg_d['input_shape'][0], step_d['n_output']), name='target' )  # (N, T_x, n_mel)
-            
+
 
             with tf.variable_scope('step2', reuse=reuse):
                 step_d = self.cfg_d['steps_v'][1]
@@ -144,10 +144,21 @@ class decoder_specs:
 
 
                     
-                if True:
+                if False:
                     inputs_step2 = tf.concat([CBHG_out, dec_inputs], axis=-1)
-                else:
                     inputs_step2 = CBHG_out
+                    inputs_step2 = self.y_mel
+                else:
+                    with tf.variable_scope('inputs_step2', reuse=reuse):
+                        
+                        if self.cfg_d['use_target_mel_step2']:
+                            self.f_pred = tf.tanh( self.i_epoch / 3000.0)
+                            self.f_true = 1 - self.f_pred
+                        
+                            inputs_step2 = self.f_pred * self.y_mel + self.f_true * self.target_mel
+                            
+                        else:
+                            inputs_step2 = self.y_mel
                 
                 # Encoder pre-net
                 prenet_out = prenet(inputs=inputs_step2,
@@ -176,10 +187,8 @@ class decoder_specs:
         return None
     
 
-
-
     def _build_loss(self, reuse=None):
-        with tf.variable_scope('loss', reuse=reuse):
+        with tf.variable_scope('dec_loss', reuse=reuse):
             self.mel_loss  = self.cfg_d['mel_loss_weight'] * tf.reduce_mean( tf.squared_difference( self.y_mel, self.target_mel ),   name='mel_loss' )
  
             self.stft_loss = self.cfg_d['stft_loss_weight'] * tf.reduce_mean( tf.squared_difference( self.y_stft, self.target_stft ), name='stft_loss' )
@@ -195,14 +204,14 @@ class decoder_specs:
                 
 
         
-            self.summary_v += [tf.summary.scalar('dec_metric/mel_loss', self.mel_loss),
+            self.summary_v += [tf.summary.scalar('dec_metric/mel_loss',  self.mel_loss),
                                tf.summary.scalar('dec_metric/stft_loss', self.stft_loss),
-                               tf.summary.scalar('dec_metric/loss', self.loss)]
+                               tf.summary.scalar('dec_metric/loss',      self.loss)]
 
 
         
 
-        with tf.variable_scope('specs', reuse=reuse):
+        with tf.variable_scope('dec_specs', reuse=reuse):
             tf_cmap = tf.constant(np.array(plt.get_cmap().colors), tf.float32)
             spec_stft = tf.concat([self.y_stft, self.target_stft], axis=-1, name='spec_stft')
             spec_mel  = tf.concat([self.y_mel,  self.target_mel],  axis=-1, name='spec_mel')
@@ -215,6 +224,7 @@ class decoder_specs:
         
             self.spec_summary_v += [ tf.summary.image('dec_metric/stft_spec', stft_spec, max_outputs=1),
                                      tf.summary.image('dec_metric/mel_spec',  mel_spec,  max_outputs=1)]
+            
         return None
 
 
@@ -249,6 +259,10 @@ class decoder_specs:
                                tf.summary.scalar('i_epoch_tf',          self.i_epoch_tf),
                                tf.summary.scalar('learning_rate_decay', self.learning_rate_decay),
                                tf.summary.scalar('learning_rate_start', self.learning_rate_start)]
+
+            if self.cfg_d['use_target_mel_step2']:
+                self.summary_v += [tf.summary.scalar('f_true',              self.f_true),
+                                   tf.summary.scalar('f_pred',              self.f_pred)]
           
         return None
 
@@ -573,11 +587,11 @@ if __name__ == '__main__':
                              'n_output':target_ds_cfg_d['n_mels']},
                             
                             {'embed_size':256, # Para la prenet. Se puede aumentar la dimension. None (usa la cantidad n_mfcc)
-                             'num_conv_banks':16,
+                             'num_conv_banks':8,
                              'num_highwaynet_blocks':8,
                              'n_output': n_stft}],
                    
-                  'dropout_rate':0.2,
+                  'dropout_rate':0.1,
                   'is_training':True,
                   'use_CudnnGRU':True, # sys.platform!='win32', # Solo cuda para linux
 
@@ -591,6 +605,7 @@ if __name__ == '__main__':
                  'mel_loss_weight': 400,
                  'stft_loss_weight':400,
                  'loss_type': 'log',
+                 'use_target_mel_step2':True,
                    
                  'ds_prop_val':0.1,
                  'randomize_samples':True,
@@ -622,7 +637,7 @@ if __name__ == '__main__':
     encoder.restore()
     
     # Restauro entrenamiento pausado
-    decoder.restore()
+##    decoder.restore()
     
 ##    # -------- Asigno nuevo lr_decay, lr_start --------
 ##    decoder.run(tf.assign(decoder.learning_rate_start, dec_cfg_d['learning_rate']))

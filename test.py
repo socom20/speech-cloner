@@ -43,7 +43,7 @@ def show_spec_comp(mel_true, mel_pred, stft_true, stft_pred, vert=False):
     return None
 
 
-def translate(decoder, mfcc, mel, stft, cfg_d, t_s=5, t_e=60, n_iter=200, output_path='./output', save_output=False):
+def translate(decoder, mfcc, mel, stft, cfg_d, t_s=5, t_e=60, n_iter=200, output_path='./output', file_name='y_wav', realse=1.0, save_output=False, giffin_lim_input=True):
 
     hop     = cfg_d['hop_length']
     n_times = cfg_d['n_timesteps']
@@ -91,15 +91,18 @@ def translate(decoder, mfcc, mel, stft, cfg_d, t_s=5, t_e=60, n_iter=200, output
 
     show_spec_comp(mel_true, mel_pred, stft_true, stft_pred, True)
 
-
-    y_wav_true = from_power_to_wav(stft_true,
-                                   P_dB_norm_factor=cfg_d['P_dB_norm_factor'],
-                                   pre_emphasis=cfg_d['pre_emphasis'],
-                                   hop_length=cfg_d['hop_length'],
-                                   win_length=cfg_d['win_length'],
-                                   mean_abs_amp_norm=15*cfg_d['mean_abs_amp_norm'],
-                                   n_iter=n_iter,
-                                   n_fft=cfg_d['n_fft'])
+    if giffin_lim_input:
+        y_wav_true = from_power_to_wav(stft_true,
+                                       P_dB_norm_factor=cfg_d['P_dB_norm_factor'],
+                                       pre_emphasis=cfg_d['pre_emphasis'],
+                                       hop_length=cfg_d['hop_length'],
+                                       win_length=cfg_d['win_length'],
+                                       mean_abs_amp_norm=15*cfg_d['mean_abs_amp_norm'],
+                                       n_iter=n_iter,
+                                       n_fft=cfg_d['n_fft'],
+                                       realse=1.0)
+    else:
+        y_wav_true = None
 
     y_wav_pred = from_power_to_wav(stft_pred,
                                    P_dB_norm_factor=cfg_d['P_dB_norm_factor'],
@@ -108,19 +111,24 @@ def translate(decoder, mfcc, mel, stft, cfg_d, t_s=5, t_e=60, n_iter=200, output
                                    win_length=cfg_d['win_length'],
                                    mean_abs_amp_norm=15*cfg_d['mean_abs_amp_norm'],
                                    n_iter=n_iter,
-                                   n_fft=cfg_d['n_fft'])
+                                   n_fft=cfg_d['n_fft'],
+                                   realse=realse)
 
 
     if save_output:
         print('Salvando salida')
         if not os.path.exists(output_path):
             os.mkdir(output_path)
-            
-        librosa.output.write_wav(output_path+'/y_wav_true.wav', y_wav_true, cfg_d['sample_rate'], norm=True)
-        librosa.output.write_wav(output_path+'/y_wav_pred.wav', y_wav_pred, cfg_d['sample_rate'], norm=True)
 
-    input('ENTER for play y_wav_true: ')
-    sd.play(y_wav_true, cfg_d['sample_rate'], blocking=True)
+        if giffin_lim_input:    
+            librosa.output.write_wav(output_path+'/{}_true.wav'.format(file_name), y_wav_true, cfg_d['sample_rate'], norm=True)
+        
+        librosa.output.write_wav(output_path+'/{}_pred.wav'.format(file_name), y_wav_pred, cfg_d['sample_rate'], norm=True)
+
+    if giffin_lim_input:
+        input('ENTER for play y_wav_true: ')
+        sd.play(y_wav_true, cfg_d['sample_rate'], blocking=True)
+    
     input('ENTER for play y_wav_pred: ')
     sd.play(y_wav_pred, cfg_d['sample_rate'], blocking=True)
     
@@ -249,13 +257,13 @@ if __name__ == '__main__':
 ##        wav_path = '/media/sergio/EVO970/UNIR/TFM/code/data_sets/ARCTIC/cmu_arctic/cmu_us_rms_arctic/wav/arctic_a0011.wav'
 ##        wav_path = '/media/sergio/EVO970/UNIR/TFM/code/data_sets/ARCTIC/cmu_arctic/cmu_us_ksp_arctic/wav/arctic_a0011.wav'
 ##        wav_path = '/media/sergio/EVO970/UNIR/TFM/code/data_sets/ARCTIC/cmu_arctic/cmu_us_jmk_arctic/wav/arctic_a0011.wav'
-        wav_path = '/media/sergio/EVO970/UNIR/TFM/code/data_sets/ARCTIC/cmu_arctic/cmu_us_clb_arctic/wav/arctic_a0011.wav'
+##        wav_path = '/media/sergio/EVO970/UNIR/TFM/code/data_sets/ARCTIC/cmu_arctic/cmu_us_clb_arctic/wav/arctic_a0011.wav'
 ##        wav_path = '/media/sergio/EVO970/UNIR/TFM/code/data_sets/ARCTIC/cmu_arctic/cmu_us_bdl_arctic/wav/arctic_a0011.wav'  # Target
 
 ##        wav_path = '../sergio.ogg'
 
 
-##        wav_path = '/media/sergio/EVO970/UNIR/TFM/code/data_sets/TRG/L. Frank Baum/The Wonderful Wizard of Oz/The Wonderful Wizard of Oz-04 Chapter 4.mp3'
+        wav_path = '/media/sergio/EVO970/UNIR/TFM/code/data_sets/TRG/L. Frank Baum/The Wonderful Wizard of Oz/The Wonderful Wizard of Oz-04 Chapter 4.mp3'
         
         wav_cfg_d = {'wav_path':wav_path,
                      'wav_norm':(0.0, 1.0),
@@ -303,7 +311,16 @@ if __name__ == '__main__':
                                            mean_abs_amp_norm=wav_cfg_d['mean_abs_amp_norm'],
                                            clip_output=wav_cfg_d['clip_output'])
         
-        y_wav_true, y_wav_pred = translate(decoder, mfcc, mel, stft, target_ds_cfg_d, t_s=0, t_e=52, output_path='./test_4', save_output=True)
+        y_wav_true, y_wav_pred = translate(decoder,
+                                           mfcc,
+                                           mel,
+                                           stft,
+                                           target_ds_cfg_d,
+                                           t_s=0, t_e=52,
+                                           output_path='./test_4', file_name='{}'.format(os.path.split(wav_path)[1].split('.')[0]),
+                                           save_output=True,
+                                           realse=1.4,
+                                           giffin_lim_input=True)
 
 
 
