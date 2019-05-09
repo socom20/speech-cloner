@@ -52,7 +52,11 @@ class decoder_specs:
 
         # Inicializo las variables
         self._initialize_variables()
-        
+
+        # Restauro pesos del encoder
+        encoder.restore()
+
+        print(' Encoder Restored !!!')
         return None
 
 
@@ -152,10 +156,10 @@ class decoder_specs:
                     with tf.variable_scope('inputs_step2', reuse=reuse):
                         
                         if self.cfg_d['use_target_mel_step2']:
-                            self.f_pred = tf.tanh( self.i_epoch / 3000.0)
-                            self.f_true = 1 - self.f_pred
-                        
-                            inputs_step2 = self.f_pred * self.y_mel + self.f_true * self.target_mel
+                            self.f_mel_pred_tf = tf.Variable(0.0, trainable=False, dtype=tf.float32, name='f_mel_pred_tf')
+                            self.f_mel_pred    = 0.0
+                            
+                            inputs_step2 = self.f_mel_pred_tf * self.y_mel + (1.0-self.f_mel_pred_tf) * self.target_mel
                             
                         else:
                             inputs_step2 = self.y_mel
@@ -261,9 +265,10 @@ class decoder_specs:
                                tf.summary.scalar('learning_rate_start', self.learning_rate_start)]
 
             if self.cfg_d['use_target_mel_step2']:
-                self.summary_v += [tf.summary.scalar('f_true',              self.f_true),
-                                   tf.summary.scalar('f_pred',              self.f_pred)]
-          
+                self.f_mel_pred_op = tf.assign( self.f_mel_pred_tf, tf.tanh( tf.cast(self.i_epoch_tf, tf.float32) / self.cfg_d['target_mel_step2_val']) )
+                self.summary_v += [tf.summary.scalar('f_mel_pred', self.f_mel_pred_tf)]
+                
+                            
         return None
 
     
@@ -431,11 +436,14 @@ class decoder_specs:
                 mel_loss_val, stft_loss_val, loss_val = self.exec_calc_metrics(mfcc_val, mel_val, stft_val)
                 print(' - i_epoch={}   global_step={}   mel_loss_val={:6.3f}   stft_loss_val={:6.3f}   loss_val={:6.3f}'.format(self.i_epoch, int(global_step), mel_loss_val, stft_loss_val, loss_val) )
 
-                
-
 
             if global_step % self.cfg_d['n_steps_epoch_trn'] == 0:
-                _, self.i_epoch, self.lr = self.sess.run( [self.i_epoch_inc_op, self.i_epoch_tf, self.lr_decay_op] )
+                self.i_epoch, self.lr = self.sess.run( [self.i_epoch_inc_op,
+                                                        self.lr_decay_op] )
+
+                if self.cfg_d['use_target_mel_step2']:
+                    self.f_mel_pred = self.sess.run( self.f_mel_pred_op )
+                    print(' - New epoch, f_mel_pred = {0:02f}'.format(self.f_mel_pred))
                 
                 if self.i_epoch >= self.cfg_d['n_epochs']:
                     break
@@ -469,21 +477,26 @@ class decoder_specs:
     def get_input_shape(self):
         return tuple(self.inputs.shape.as_list()[1:])
     
-    def eval_acc(self, ds_iterator, n_batchs=100):
-        n_c = 0
-        n_t = 0
-        for i_batch in range(n_batchs):
-            mfcc_batch, phn_v_batch = next(ds_iterator)
-            y_pred = self.sess.run(self.y_pred, {self.inputs: mfcc_batch})
-            y_dec  = np.argmax( y_pred, axis=-1)
-            y_true = np.argmax( phn_v_batch, axis=-1)
-##            f = ( np.abs(mfcc_batch).sum(axis=-1) > np.finfo(np.float32).eps )
-            n_c += (y_dec == y_true).sum()
-            n_t += y_dec.size
-            acc = n_c/n_t
-            print('acc[{:4d}] = {:5.03f}'.format(int(n_t), acc))
+    def eval_loss(self, ds_sampler, n_batchs=100):
+        loss_v = []
+        mel_loss_v = []
+        stft_loss_v = []
+
+        for i_batch, (mfcc_batch, mel_batch, stft_batch) in enumerate(ds_sampler):
+            loss, mel_loss, stft_loss = self.sess.run([self.loss,
+                                                       self.mel_loss,
+                                                       self.stft_loss],
+                                                      
+                                                      {self.inputs:     mfcc_batch,
+                                                       self.target_mel: mel_batch,
+                                                       self.target_stft:stft_batch})
             
-        return acc, n_t
+            loss_v.append( loss )
+            mel_loss_v.append( mel_loss )
+            stft_loss_v.append( stft_loss )
+            print(' - i_batch={:2d} - loss={:0.3f}  -   mel_loss={:0.3f}  -   stft_loss={:0.3f}'.format(i_batch, np.mean(loss_v), np.mean(mel_loss_v), np.mean(stft_loss_v)))
+            
+        return np.mean(loss_v), np.mean(mel_loss_v), np.mean(stft_loss_v)
 
     
 
@@ -606,6 +619,7 @@ if __name__ == '__main__':
                  'stft_loss_weight':400,
                  'loss_type': 'log',
                  'use_target_mel_step2':True,
+                 'target_mel_step2_val':2500,
                    
                  'ds_prop_val':0.1,
                  'randomize_samples':True,
@@ -634,7 +648,7 @@ if __name__ == '__main__':
 ##        encoder.eval_acc(timit.window_sampler(ds_filter_d={'ds_type':'TEST'}) )
 
     decoder = decoder_specs(cfg_d=dec_cfg_d, ds=trg_spk, encoder=encoder)
-    encoder.restore()
+    
     
     # Restauro entrenamiento pausado
 ##    decoder.restore()

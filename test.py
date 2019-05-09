@@ -158,13 +158,13 @@ if __name__ == '__main__':
 
     print('Press ENTER to continue: ', end=''); input()
     
-
+    dec_cfg_d['use_target_mel_step2'] = False
     decoder = decoder_specs(cfg_d=dec_cfg_d, ds=None, encoder=encoder)
 ##    encoder.restore()
     decoder.restore()
 
 
-    if 0:
+    if 1:
         print('TEST 1: trg_spk_mfcc to trg_stft')
         mfcc, mel, stft = next( iter( trg_spk.spec_window_sampler(sample_trn=True) ) )
 
