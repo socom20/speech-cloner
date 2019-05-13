@@ -1,12 +1,25 @@
 #! /usr/bin/python3
-import os
+import os, sys
 
 
 def remove_group(i, files_v, folder_name, ext_v):
     for e in ext_v:
         file_path = os.path.join(folder_name, files_v[i][0] + e)
-#        print(file_path)
-        os.remove(file_path)
+        try:
+            os.remove(file_path)
+        except Exception as e:
+            print(' - ERROR, while deleting "{}": {}'.format(file_path, e), file=sys.stderr)
+            r = ''
+            while r not in ('y', 'n'):
+                print(' Continue (y/n):', end='')
+                r = input()
+
+            if r == 'y':
+                continue
+            else:
+                sys.exit(1)
+                
+##        print(file_path)
         
     return None
     

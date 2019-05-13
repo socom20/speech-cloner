@@ -164,7 +164,7 @@ if __name__ == '__main__':
     decoder.restore()
 
 
-    if 1:
+    if 0:
         print('TEST 1: trg_spk_mfcc to trg_stft')
         mfcc, mel, stft = next( iter( trg_spk.spec_window_sampler(sample_trn=True) ) )
 
@@ -247,9 +247,9 @@ if __name__ == '__main__':
     if 1:
         print('TEST 4: other_spk_mfcc to target_spk_wav')
 ##        wav_path = '/media/sergio/EVO970/UNIR/TFM/dataset/VCTK-Corpus/VCTK-Corpus/wav48/p299/p299_005.wav'
-##        wav_path = '/media/sergio/EVO970/UNIR/TFM/dataset/VCTK-Corpus/VCTK-Corpus/wav48/p374/p374_023.wav'
+        wav_path = '/media/sergio/EVO970/UNIR/TFM/dataset/VCTK-Corpus/VCTK-Corpus/wav48/p374/p374_023.wav'
 ##        wav_path = '/media/sergio/EVO970/UNIR/TFM/dataset/VCTK-Corpus/VCTK-Corpus/wav48/p339/p339_008.wav'
-##        wav_path = '/media/sergio/EVO970/UNIR/TFM/dataset/VCTK-Corpus/VCTK-Corpus/wav48/p267/p267_023.wav'
+ ##        wav_path = '/media/sergio/EVO970/UNIR/TFM/dataset/VCTK-Corpus/VCTK-Corpus/wav48/p267/p267_023.wav'
 
 ##        wav_path = '/media/sergio/EVO970/UNIR/TFM/dataset/VCTK-Corpus/VCTK-Corpus/wav48/p234/p234_020.wav'
 
@@ -263,7 +263,7 @@ if __name__ == '__main__':
 ##        wav_path = '../sergio.ogg'
 
 
-        wav_path = '/media/sergio/EVO970/UNIR/TFM/code/data_sets/TRG/L. Frank Baum/The Wonderful Wizard of Oz/The Wonderful Wizard of Oz-04 Chapter 4.mp3'
+##        wav_path = '/media/sergio/EVO970/UNIR/TFM/code/data_sets/TRG/L. Frank Baum/The Wonderful Wizard of Oz/The Wonderful Wizard of Oz-04 Chapter 4.mp3'
         
         wav_cfg_d = {'wav_path':wav_path,
                      'wav_norm':(0.0, 1.0),
@@ -320,7 +320,7 @@ if __name__ == '__main__':
                                            output_path='./test_4', file_name='{}'.format(os.path.split(wav_path)[1].split('.')[0]),
                                            save_output=True,
                                            realse=1.4,
-                                           giffin_lim_input=True)
+                                           giffin_lim_input=False)
 
 
 

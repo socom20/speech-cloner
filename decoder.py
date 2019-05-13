@@ -265,7 +265,7 @@ class decoder_specs:
                                tf.summary.scalar('learning_rate_start', self.learning_rate_start)]
 
             if self.cfg_d['use_target_mel_step2']:
-                self.f_mel_pred_op = tf.assign( self.f_mel_pred_tf, tf.tanh( tf.cast(self.i_epoch_tf, tf.float32) / self.cfg_d['target_mel_step2_val']) )
+                self.f_mel_pred_op = tf.assign( self.f_mel_pred_tf, tf.minimum(1.0, 1.02*tf.tanh( tf.cast(self.i_epoch_tf, tf.float32) / self.cfg_d['target_mel_step2_val'])) )
                 self.summary_v += [tf.summary.scalar('f_mel_pred', self.f_mel_pred_tf)]
                 
                             
@@ -594,14 +594,14 @@ if __name__ == '__main__':
                    
                  'input_shape':(enc_cfg_d['input_shape'][0], enc_cfg_d['n_output']),
                  
-                 'steps_v':[{'embed_size':128, # Para la prenet. Se puede aumentar la dimension. None (usa la cantidad n_mfcc)
+                 'steps_v':[{'embed_size':256, # Para la prenet. Se puede aumentar la dimension. None (usa la cantidad n_mfcc)
                              'num_conv_banks':8,
                              'num_highwaynet_blocks':4,
                              'n_output':target_ds_cfg_d['n_mels']},
                             
                             {'embed_size':256, # Para la prenet. Se puede aumentar la dimension. None (usa la cantidad n_mfcc)
-                             'num_conv_banks':8,
-                             'num_highwaynet_blocks':8,
+                             'num_conv_banks':16,
+                             'num_highwaynet_blocks':4,
                              'n_output': n_stft}],
                    
                   'dropout_rate':0.1,
@@ -617,13 +617,13 @@ if __name__ == '__main__':
 
                  'mel_loss_weight': 400,
                  'stft_loss_weight':400,
-                 'loss_type': 'log',
-                 'use_target_mel_step2':True,
-                 'target_mel_step2_val':2500,
+                 'loss_type': 'sum',
+                 'use_target_mel_step2':False,
+                 'target_mel_step2_val':500,
                    
-                 'ds_prop_val':0.1,
+                 'ds_prop_val':0.2,
                  'randomize_samples':True,
-                 'ds_filter_d':{'spk_id': 'bdl'},
+                 'ds_filter_d':{'spk_id': 'slt'},
                    
                  'n_epochs':        99999,
                  'batch_size':        32,
