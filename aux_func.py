@@ -2,7 +2,18 @@ import os, sys
 import json
 
 
+def make_dir_path(path='./algo1/algo2', verbose=True):
+    path_v = path.replace('\\','/').split('/')
 
+    for i in range(len(path_v)):
+        p = '/'.join(path_v[:i+1])
+        if len(p) > 0 and not os.path.exists(p):
+            if verbose:
+                print(' - make_dir_path: Creando:', p)
+            os.mkdir(p)
+    return None
+    
+    
 def show_diff(cfg_d, old_cfg_d, i_level=0):
     
     keys_v = sorted(list( set(cfg_d.keys()).union( set(old_cfg_d.keys()) ) ))
@@ -29,6 +40,8 @@ def show_diff(cfg_d, old_cfg_d, i_level=0):
     return n_changes
     
 def load_cfg_d(cfg_path_name='./ds_cfg_d.txt'):
+    cfg_path_name = cfg_path_name.replace('\\','/')
+    
     with open(cfg_path_name, 'r') as f:
         print(' Restaurando:', cfg_path_name)
         cfg_d_str = ''.join(f.readlines())
@@ -37,7 +50,11 @@ def load_cfg_d(cfg_path_name='./ds_cfg_d.txt'):
 
 
 def save_cfg_d(cfg_d={}, cfg_path_name='./ds_cfg_d.txt'):
-
+    cfg_path_name = cfg_path_name.replace('\\','/')
+    
+    path_dir, filename = os.path.split(cfg_path_name)
+    make_dir_path(path_dir)
+    
     if os.path.exists(cfg_path_name):
         old_cfg_d = load_cfg_d(cfg_path_name)
         cfg_d     = json.loads(json.dumps(cfg_d))

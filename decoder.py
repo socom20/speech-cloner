@@ -130,7 +130,8 @@ class decoder_specs:
                                 dropout_rate=self.cfg_d['dropout_rate'],
                                 is_training=self.cfg_d['is_training'],
                                 scope="CBHG",
-                                use_CudnnGRU=self.cfg_d['use_CudnnGRU'],
+                                use_Cudnn=self.cfg_d['use_Cudnn'],
+                                use_lstm=self.cfg_d['use_lstm'],
                                 reuse=reuse) # (N, T_x, E)
 
                 
@@ -181,7 +182,8 @@ class decoder_specs:
                                 dropout_rate=self.cfg_d['dropout_rate'],
                                 is_training=self.cfg_d['is_training'],
                                 scope="CBHG",
-                                use_CudnnGRU=self.cfg_d['use_CudnnGRU'],
+                                use_Cudnn=self.cfg_d['use_Cudnn'],
+                                use_lstm =self.cfg_d['use_lstm'],
                                 reuse=reuse) # (N, T_x, E)
 
                 
@@ -606,8 +608,9 @@ if __name__ == '__main__':
                    
                   'dropout_rate':0.1,
                   'is_training':True,
-                  'use_CudnnGRU':True, # sys.platform!='win32', # Solo cuda para linux
-
+                  'use_Cudnn':False, # sys.platform!='win32', # Solo cuda para linux
+                  'use_lstm':False,
+                   
                  'learning_rate':1.0e-3,
                  'decay':1.0e-3,
                    

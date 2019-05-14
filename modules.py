@@ -163,7 +163,7 @@ def conv1d_banks(inputs, K=16, embed_size=256, is_training=True, scope="conv1d_b
         outputs = bn(outputs, is_training=is_training, activation_fn=tf.nn.relu)
     return outputs # (N, T, embed_size//2*K)
 
-def gru(inputs, num_units=None, bidirection=False, scope="gru", use_CudnnGRU=False, reuse=None):
+def gru(inputs, num_units=None, bidirection=False, scope="gru", use_Cudnn=False, reuse=None):
     '''Applies a GRU.
     
     Args:
@@ -183,7 +183,7 @@ def gru(inputs, num_units=None, bidirection=False, scope="gru", use_CudnnGRU=Fal
         if num_units is None:
             num_units = inputs.get_shape().as_list[-1]
 
-        if use_CudnnGRU:
+        if use_Cudnn:
             if bidirection:
                 outputs, _ = tf.contrib.cudnn_rnn.CudnnGRU(1, num_units, direction='bidirectional')(inputs)
             else:
@@ -201,6 +201,45 @@ def gru(inputs, num_units=None, bidirection=False, scope="gru", use_CudnnGRU=Fal
                 outputs, _ = tf.nn.dynamic_rnn(cell, inputs, dtype=tf.float32)
                 return outputs
 
+
+def lstm(inputs, num_units=None, bidirection=False, scope="lstm", use_Cudnn=False, reuse=None):
+    '''Applies a LSTM.
+    
+    Args:
+      inputs: A 3d tensor with shape of [N, T, C].
+      num_units: An int. The number of hidden units.
+      bidirection: A boolean. If True, bidirectional results 
+        are concatenated.
+      scope: Optional scope for `variable_scope`.  
+      reuse: Boolean, whether to reuse the weights of a previous layer
+        by the same name.
+        
+    Returns:
+      If bidirection is True, a 3d tensor with shape of [N, T, 2*num_units],
+        otherwise [N, T, num_units].
+    '''
+    with tf.variable_scope(scope, reuse=reuse):
+        if num_units is None:
+            num_units = inputs.get_shape().as_list[-1]
+
+        if use_Cudnn:
+            if bidirection:
+                outputs, _ = tf.contrib.cudnn_rnn.CudnnLSTM(1, num_units, direction='bidirectional')(inputs)
+            else:
+                outputs, _ = tf.contrib.cudnn_rnn.CudnnLSTM(1, num_units, direction='unidirectional')(inputs)
+                
+            return outputs
+            
+        else:
+            cell = tf.contrib.rnn.LSTMCell(num_units)  
+            if bidirection: 
+                cell_bw = tf.contrib.rnn.LSTMCell(num_units)
+                outputs, _ = tf.nn.bidirectional_dynamic_rnn(cell, cell_bw, inputs, dtype=tf.float32)
+                return tf.concat(outputs, 2)
+            else:
+                outputs, _ = tf.nn.dynamic_rnn(cell, inputs, dtype=tf.float32)
+                return outputs
+                
 
 def attention_decoder(inputs, memory, num_units=None, scope="attention_decoder", reuse=None):
     '''Applies a GRU to `inputs`, while attending `memory`.
@@ -279,7 +318,7 @@ def highwaynet(inputs, num_units=None, scope="highwaynet", reuse=None):
 
 
 
-def CBHG(inputs, embed_size=256, num_conv_banks=16, num_highwaynet_blocks=4, dropout_rate=0.5, is_training=True, scope="CBHG", use_CudnnGRU=False, reuse=None):
+def CBHG(inputs, embed_size=256, num_conv_banks=16, num_highwaynet_blocks=4, dropout_rate=0.5, is_training=True, scope="CBHG", use_Cudnn=False, use_lstm=False, reuse=None):
 
 
     with tf.variable_scope(scope, reuse=reuse):
@@ -302,9 +341,13 @@ def CBHG(inputs, embed_size=256, num_conv_banks=16, num_highwaynet_blocks=4, dro
             for i in range(num_highwaynet_blocks):
                 enc = highwaynet(enc, num_units=embed_size//2, 
                                      scope='highwaynet_{}'.format(i)) # (N, T_x, E/2)
-
-            ## Bidirectional GRU
-            output = gru(enc, num_units=embed_size//2, bidirection=True, use_CudnnGRU=use_CudnnGRU) # (N, T_x, E)
+            
+            if use_lstm:
+                ## Bidirectional LSTM
+                output = lstm(enc, num_units=embed_size//2, bidirection=True, use_Cudnn=use_Cudnn) # (N, T_x, E)
+            else:
+                ## Bidirectional GRU
+                output = gru(enc, num_units=embed_size//2, bidirection=True, use_Cudnn=use_Cudnn) # (N, T_x, E)
 
     return output
 
@@ -314,7 +357,7 @@ def CBHG(inputs, embed_size=256, num_conv_banks=16, num_highwaynet_blocks=4, dro
 
 
 if __name__ == '__main__':
-    def model(inputs, embed_size=256, n_output=48, num_conv_banks=16, num_highwaynet_blocks=4, dropout_rate=0.5, is_training=True, scope="model", use_CudnnGRU=False, reuse=None):
+    def model(inputs, embed_size=256, n_output=48, num_conv_banks=16, num_highwaynet_blocks=4, dropout_rate=0.5, is_training=True, scope="model", use_Cudnn=False, reuse=None):
 
         
         with tf.variable_scope(scope, reuse=reuse): 
@@ -322,7 +365,7 @@ if __name__ == '__main__':
             prenet_out = prenet(inputs, None, embed_size, dropout_rate, is_training, scope="prenet", reuse=None) # (N, T_x, E/2)
             
             # Encoder CBHG 
-            CBHG_out = CBHG(prenet_out, embed_size, num_conv_banks, num_highwaynet_blocks, dropout_rate, is_training, scope="CBHG", use_CudnnGRU=use_CudnnGRU, reuse=None) # (N, T_x, E)
+            CBHG_out = CBHG(prenet_out, embed_size, num_conv_banks, num_highwaynet_blocks, dropout_rate, is_training, scope="CBHG", use_Cudnn=use_Cudnn, reuse=None) # (N, T_x, E)
 
 
             # Classificator

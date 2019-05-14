@@ -31,10 +31,9 @@ class encoder_spec_phn:
                            dropout_rate=self.cfg_d['dropout_rate'],
                            is_training=self.cfg_d['is_training'],
                            scope=self.cfg_d['model_name'],
-                           use_CudnnGRU=self.cfg_d['use_CudnnGRU'],
+                           use_Cudnn=self.cfg_d['use_Cudnn'],
+                           use_lstm=self.cfg_d['use_lstm'],
                            reuse=None )
-
-        
 
         
         # Armo la funcion de costo
@@ -76,7 +75,7 @@ class encoder_spec_phn:
 
 
         
-    def _build_model(self, input_shape=(800, 256), n_output=48, embed_size=None, num_conv_banks=16, num_highwaynet_blocks=4, dropout_rate=0.5, is_training=True, scope="model", use_CudnnGRU=False, reuse=None):
+    def _build_model(self, input_shape=(800, 256), n_output=48, embed_size=None, num_conv_banks=16, num_highwaynet_blocks=4, dropout_rate=0.5, is_training=True, scope="model", use_Cudnn=False, use_lstm=False, reuse=None):
         '''
         Args:
           inputs: A 2d tensor with shape of [N, T_x, E], with dtype of int32. Encoder inputs.
@@ -103,7 +102,7 @@ class encoder_spec_phn:
             prenet_out = prenet(inputs, None, embed_size, dropout_rate, is_training, scope="prenet", reuse=None) # (N, T_x, E/2)
             
             # Encoder CBHG 
-            CBHG_out = CBHG(prenet_out, embed_size, num_conv_banks, num_highwaynet_blocks, dropout_rate, is_training, scope="CBHG", use_CudnnGRU=use_CudnnGRU, reuse=None) # (N, T_x, E)
+            CBHG_out = CBHG(prenet_out, embed_size, num_conv_banks, num_highwaynet_blocks, dropout_rate, is_training, scope="CBHG", use_Cudnn=use_Cudnn, use_lstm=use_lstm, reuse=None) # (N, T_x, E)
 
 
             # Classificator
@@ -434,15 +433,16 @@ if __name__ == '__main__':
     
     model_cfg_d = {'model_name':'phn_model',
                    
-                   'input_shape':(ds_cfg_d['n_timesteps'], ds_cfg_d['n_mfcc']),
+                   'input_shape':(ds_cfg_d['n_timesteps'], (2 if ds_cfg_d['calc_mfcc_derivate'] else 1)*ds_cfg_d['n_mfcc']),
                    'n_output':61,
                    
-                   'embed_size':128, # Para la prenet. Se puede aumentar la dimension. None (usa la cantidad n_mfcc)
-                   'num_conv_banks':16,
-                   'num_highwaynet_blocks':4,
-                   'dropout_rate':0.5,
+                   'embed_size':64, # Para la prenet. Se puede aumentar la dimension. None (usa la cantidad n_mfcc)
+                   'num_conv_banks':4,
+                   'num_highwaynet_blocks':2,
+                   'dropout_rate':0.2,
                    'is_training':True,
-                   'use_CudnnGRU':False, # sys.platform!='win32', # Solo cuda para linux
+                   'use_Cudnn':False, # sys.platform!='win32', # Solo cuda para linux
+                   'use_lstm':False,
 
                    'model_name':'encoder',
 
@@ -463,12 +463,13 @@ if __name__ == '__main__':
                    'val_batch_size':   128,
                    'save_each_n_epochs':3,
 
-                   'log_dir':'./stats_dir',
-                   'model_path':'./enc_ckpt'}
+                   'log_dir':'./enc_stats_dir',
+                   'model_path':'./enc_6_ckpt'}
 
 
+    model_cfg_d = load_cfg_d('./hp/encoder_cfg_d.json')
 ##    save_cfg_d(ds_cfg_d,    './hp/ds_cfg_d.json')
-##    save_cfg_d(model_cfg_d, './hp/encder_cfg_d.json')
+##    save_cfg_d(model_cfg_d, './hp/encoder_cfg_d.json')
 
     if True:
         timit = TIMIT(ds_cfg_d)

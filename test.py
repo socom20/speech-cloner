@@ -320,7 +320,7 @@ if __name__ == '__main__':
                                            output_path='./test_4', file_name='{}'.format(os.path.split(wav_path)[1].split('.')[0]),
                                            save_output=True,
                                            realse=1.4,
-                                           giffin_lim_input=False)
+                                           giffin_lim_input=True)
 
 
 
