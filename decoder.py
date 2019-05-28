@@ -609,7 +609,7 @@ if __name__ == '__main__':
                   'dropout_rate':0.1,
                   'is_training':True,
                   'use_Cudnn':False, # sys.platform!='win32', # Solo cuda para linux
-                  'use_lstm':False,
+                  'use_lstm':True,
                    
                  'learning_rate':1.0e-3,
                  'decay':1.0e-3,

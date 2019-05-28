@@ -247,7 +247,7 @@ if __name__ == '__main__':
     if 1:
         print('TEST 4: other_spk_mfcc to target_spk_wav')
 ##        wav_path = '/media/sergio/EVO970/UNIR/TFM/dataset/VCTK-Corpus/VCTK-Corpus/wav48/p299/p299_005.wav'
-        wav_path = '/media/sergio/EVO970/UNIR/TFM/dataset/VCTK-Corpus/VCTK-Corpus/wav48/p374/p374_023.wav'
+##        wav_path = '/media/sergio/EVO970/UNIR/TFM/dataset/VCTK-Corpus/VCTK-Corpus/wav48/p374/p374_023.wav'
 ##        wav_path = '/media/sergio/EVO970/UNIR/TFM/dataset/VCTK-Corpus/VCTK-Corpus/wav48/p339/p339_008.wav'
  ##        wav_path = '/media/sergio/EVO970/UNIR/TFM/dataset/VCTK-Corpus/VCTK-Corpus/wav48/p267/p267_023.wav'
 
@@ -262,7 +262,8 @@ if __name__ == '__main__':
 
 ##        wav_path = '../sergio.ogg'
 
-
+        wav_path = '/media/sergio/EVO970/UNIR/TFM/dataset/Audiobooks/wizard of OZ/08 The Deadly Poppy Field.mp3'
+        
 ##        wav_path = '/media/sergio/EVO970/UNIR/TFM/code/data_sets/TRG/L. Frank Baum/The Wonderful Wizard of Oz/The Wonderful Wizard of Oz-04 Chapter 4.mp3'
         
         wav_cfg_d = {'wav_path':wav_path,

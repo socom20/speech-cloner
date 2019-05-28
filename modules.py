@@ -139,6 +139,8 @@ def conv1d(inputs,
         outputs = tf.layers.conv1d(**params)
     return outputs
 
+
+
 def conv1d_banks(inputs, K=16, embed_size=256, is_training=True, scope="conv1d_banks", reuse=None):
     '''Applies a series of conv1d separately.
     
@@ -343,9 +345,11 @@ def CBHG(inputs, embed_size=256, num_conv_banks=16, num_highwaynet_blocks=4, dro
                                      scope='highwaynet_{}'.format(i)) # (N, T_x, E/2)
             
             if use_lstm:
+                print('CBHG: using LSTM!!')
                 ## Bidirectional LSTM
                 output = lstm(enc, num_units=embed_size//2, bidirection=True, use_Cudnn=use_Cudnn) # (N, T_x, E)
             else:
+                print('CBHG: using GRU!!')
                 ## Bidirectional GRU
                 output = gru(enc, num_units=embed_size//2, bidirection=True, use_Cudnn=use_Cudnn) # (N, T_x, E)
 
@@ -357,7 +361,7 @@ def CBHG(inputs, embed_size=256, num_conv_banks=16, num_highwaynet_blocks=4, dro
 
 
 if __name__ == '__main__':
-    def model(inputs, embed_size=256, n_output=48, num_conv_banks=16, num_highwaynet_blocks=4, dropout_rate=0.5, is_training=True, scope="model", use_Cudnn=False, reuse=None):
+    def model(inputs, embed_size=256, n_output=48, num_conv_banks=16, num_highwaynet_blocks=4, dropout_rate=0.5, is_training=True, scope="model", use_Cudnn=True, use_lstm=True, reuse=None):
 
         
         with tf.variable_scope(scope, reuse=reuse): 
@@ -365,7 +369,7 @@ if __name__ == '__main__':
             prenet_out = prenet(inputs, None, embed_size, dropout_rate, is_training, scope="prenet", reuse=None) # (N, T_x, E/2)
             
             # Encoder CBHG 
-            CBHG_out = CBHG(prenet_out, embed_size, num_conv_banks, num_highwaynet_blocks, dropout_rate, is_training, scope="CBHG", use_Cudnn=use_Cudnn, reuse=None) # (N, T_x, E)
+            CBHG_out = CBHG(prenet_out, embed_size, num_conv_banks, num_highwaynet_blocks, dropout_rate, is_training, scope="CBHG", use_Cudnn=use_Cudnn, use_lstm=use_lstm,  reuse=None) # (N, T_x, E)
 
 
             # Classificator
