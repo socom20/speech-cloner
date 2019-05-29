@@ -1,0 +1,2 @@
+model_checkpoint_path: "encoder-136512"
+all_model_checkpoint_paths: "encoder-136512"

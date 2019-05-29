@@ -419,35 +419,35 @@ if __name__ == '__main__':
                 'n_fft':None,
                 'window':'hann',
                 'mfcc_normaleze_first_mfcc':True,
-                'calc_mfcc_derivate':False,
+                'calc_mfcc_derivate':True,
                 
                 'mfcc_norm_factor':0.01,
                 'M_dB_norm_factor':0.01,
                 'P_dB_norm_factor':0.01,
-                
+
                 
                 'mean_abs_amp_norm':0.003,
                 'clip_output':True}
 
 
     
-    model_cfg_d = {'model_name':'phn_model',
+    model_cfg_d = {'model_name':'encoder',
                    
                    'input_shape':(ds_cfg_d['n_timesteps'], (2 if ds_cfg_d['calc_mfcc_derivate'] else 1)*ds_cfg_d['n_mfcc']),
                    'n_output':61,
                    
-                   'embed_size':64, # Para la prenet. Se puede aumentar la dimension. None (usa la cantidad n_mfcc)
-                   'num_conv_banks':4,
-                   'num_highwaynet_blocks':2,
-                   'dropout_rate':0.2,
+                   'embed_size':None, # Para la prenet. Se puede aumentar la dimension. None (usa la cantidad n_mfcc)
+                   'num_conv_banks':6,
+                   'num_highwaynet_blocks':1,
+                   'dropout_rate':0.4,
                    'is_training':True,
                    'use_Cudnn':False, # sys.platform!='win32', # Solo cuda para linux
                    'use_lstm':False,
 
                    'model_name':'encoder',
 
-                   'learning_rate':5.0e-3,
-                   'decay':1.0e-2,
+                   'learning_rate':1.0e-3,
+                   'decay':1.0e-3,
                    
                    'beta1':0.9,
                    'beta2':0.999,
@@ -460,15 +460,18 @@ if __name__ == '__main__':
                    
                    'n_epochs':        99999,
                    'batch_size':       32,
-                   'val_batch_size':   128,
+                   'val_batch_size':   32,
                    'save_each_n_epochs':3,
 
                    'log_dir':'./enc_stats_dir',
-                   'model_path':'./enc_6_ckpt'}
+                   'model_path':'./enc_14_ckpt'}
 
 
     model_cfg_d = load_cfg_d('./hp/encoder_cfg_d.json')
-##    save_cfg_d(ds_cfg_d,    './hp/ds_cfg_d.json')
+    ds_cfg_d    = load_cfg_d('./hp/ds_enc_cfg_d.json')
+
+    
+##    save_cfg_d(ds_cfg_d,    './hp/ds_enc_cfg_d.json')
 ##    save_cfg_d(model_cfg_d, './hp/encoder_cfg_d.json')
 
     if True:
