@@ -624,7 +624,7 @@ if __name__ == '__main__':
                  'use_target_mel_step2':False,
                  'target_mel_step2_val':500,
                    
-                 'ds_prop_val':0.2,
+                 'ds_prop_val':0.05,
                  'randomize_samples':True,
                  'ds_filter_d':{'spk_id': 'slt'},
                    

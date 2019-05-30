@@ -5,6 +5,7 @@ import librosa
 
 import pickle
 import h5py
+import copy
 from collections import namedtuple
 
 
@@ -113,6 +114,31 @@ class Sound_DS():
 
 
     def get_ds_filter(self, ds_filter_d={'spk_id':['bdl','rms','slt','clb']}):
+        """La funcion devuelve un filtro para el dataset cargado, el filtro pyede ser para cualquier
+           key del dataset. Si el filtro es una lista, adiciona posibilidades al valor de la key.
+           
+           Ejemplo de filtro:
+                ds_filter_d={'spk_id':['bdl','rms']}  # filtra todos los spk_id menos bdl y rms
+                
+                ds_filter_d={'split_d':{'split_key':'spk_id'
+                                       'split_type':'trn'
+                                       'split_props_v':(0.8,0.9)},
+                             'spk_id':['bdl','rms']}  # filtra todos los spk_id menos bdl y rms,
+                                                      # a su vez devulenve el set de trn (separado por proporcion 0.0 a 0.8)
+                                                      # para la key 'spk_id'. (0.8 a 0.9 es val y 0.9 a 1.0 es tst)
+                
+
+        """
+        ds_filter_d = copy.deepcopy(ds_filter_d)
+
+        
+        if 'split_d' in ds_filter_d.keys():
+            split_d = ds_filter_d['split_d']
+            del(ds_filter_d['split_d'])
+        else:
+            split_d = None
+
+            
         f = np.ones(self.ds['wav'].shape[0], dtype=np.bool)
 
         for c, v in ds_filter_d.items():
@@ -129,6 +155,50 @@ class Sound_DS():
 
             f = f * p_f  # and
 
+        if split_d is not None:
+            if type(split_d) is not dict:
+                raise Exception(' - ERROR, get_ds_fillter: split_d debe ser class dict')
+            
+            split_key     = split_d['split_key']
+            split_type    = split_d['split_type']
+            split_props_v = split_d['split_props_v']
+            
+            if split_key not in self.ds.keys():
+                raise Exception(' - ERROR, get_ds_fillter: campo para split "{}" no encontrado en el ds'.format(split_key))
+            if split_type not in ['trn', 'val', 'tst']:
+                raise Exception(' - ERROR, get_ds_fillter: tipo de split no reconocido "{}"'.format(split_type))
+            if type(split_props_v) is not tuple or len(split_props_v) != 2:
+                raise Exception(' - ERROR, get_ds_fillter: split_props_v="{}", deberia ser un tupla de len 2'.format(split_props))
+            if split_props_v[0] > split_props_v[1]:
+                raise Exception(' - ERROR, get_ds_fillter: split_props_v="{}", el segundo elemento no puede set superior al primero.'.format(split_props))
+
+
+            all_keys_v = np.unique(self.ds[split_key][f])
+
+            for k in all_keys_v:
+                f_k = f * (self.ds[split_key] == k)
+                
+                n_samples_k = f_k.sum()
+                f_k_aw = np.argwhere(f_k).T[0]
+
+                n_trn = int(n_samples_k * split_props_v[0])
+                n_val = int(n_samples_k * split_props_v[1])
+
+                if split_type != 'trn':
+                    f[f_k_aw[:n_trn]] = False
+
+                if split_type != 'val':
+                    f[f_k_aw[n_trn:n_val]] = False
+
+                if split_type != 'tst':
+                    f[f_k_aw[n_val:]] = False
+
+                if f[f_k_aw].sum() == 0:
+                    print('WARNING, no se selecciona ningun dato para k="{}" con split_key="{}". revisar valores de filtrado.'.format(k, split_key), file=sys.stderr)
+                    
+
+                
+            
         if f.sum() == 0:
             print('WARNING, no se selecciona ningun dato. Revisar campos de filtrado', file=sys.stderr)
         
