@@ -307,6 +307,7 @@ class TIMIT(Sound_DS):
         y, sr = librosa.load(os.path.join( self.ds_path, sub_path), sr=self.sample_rate)
         return y
 
+
     def read_txt(self, sub_path='./TEST/DR1/FAKS0/SA1.PHN'):
 
         file_path = os.path.join(self.ds_path, sub_path)
@@ -429,15 +430,26 @@ class TIMIT(Sound_DS):
 
 
 
-    def speaker_window_sampler(self, batch_size=32, n_epochs=1, ds_filter_d={'spk_id':['DWH0', 'DWK0', 'DWM0']}, randomize_samples=True):
-        
+    def prepare_speaker_dicts(self, ds_filter_d={'split_d':{'split_key':'spk_id', 'split_props_v':(0.8,0.9), 'split_type':'trn'},'spk_id':['RDD0', 'RDM0']}):
         f = self.get_ds_filter(ds_filter_d)
 
         self.all_spk_id_v = list( np.unique(self.ds['spk_id'][f]) )
-        n_spk = len(self.all_spk_id_v)
+        
+        self.spk_id2oh    = {}
+        self.spk_id2class = {}
+        self.spk_class2id = {}
 
-        self.spk_idx2spk = {}
-        self.spk_id2oh   = {}
+        n_spk = len(self.all_spk_id_v)
+        return n_spk
+
+    
+        
+    def speaker_spec_sampler(self, batch_size=32, n_epochs=1, ds_filter_d={'spk_id':['DWH0', 'DWK0', 'DWM0']}, randomize_samples=True):
+        
+        n_spk = self.prepare_speaker_dicts(ds_filter_d)
+
+        
+    
         for spk_class, spk_id in enumerate(self.all_spk_id_v):
             oh = np.zeros(n_spk)
             oh[spk_class] = 1.0
@@ -446,115 +458,15 @@ class TIMIT(Sound_DS):
             self.spk_id2class[spk_id]    = spk_class
             self.spk_class2id[spk_class] = spk_id
         
-        for x_v, y_v, idxs_v in self.window_sampler(self, batch_size, n_epochs, randomize_samples, ds_filter_d, yield_idxs=True):
+        for mfcc_v, mel_dB_v, power_dB_v, idxs_v in self.spec_window_sampler(batch_size=batch_size, n_epochs=n_epochs, randomize_samples=randomize_samples, sample_trn=True, prop_val=0.0, ds_filter_d=ds_filter_d, yield_idxs=True):
             class_v = []
             for spk_id in self.ds['spk_id'][idxs_v[:,-1]]:
                 class_v.append( self.spk_id2oh[spk_id] )
 
+            class_v = np.array(class_v)
 
-            yield  x_v, np.array(class_v)
+            yield mfcc_v, mel_dB_v, power_dB_v, class_v
         
-
-    def _zero_pad(self, *to_pad, pad_len=10):
-        ret_v = []
-        for spec in to_pad:
-            spec_padded = np.concatenate( [spec, np.zeros( (pad_len, spec.shape[1]) )], axis=0 )
-            
-            ret_v.append(spec_padded)
-
-        return ret_v
-    
-
-    def spec_window_sampler(self, batch_size=32, n_epochs=1, randomize_samples=True, sample_trn=True, prop_val=0.3, ds_filter_d={}, yield_idxs=False):
-        n_timesteps=self.n_timesteps 
-        f_s = self.get_ds_filter(ds_filter_d)
-        samples_v = np.arange(f_s.shape[0])[f_s]
-        samples_v = np.array( [str(i) for i in samples_v] )
-
-        if prop_val > 0.0:
-            np.random.seed(0)# Some seed
-            
-            idx_v = np.arange(samples_v.shape[0])
-            np.random.shuffle(idx_v)
-
-            n_val = int(prop_val*samples_v.shape[0])
-            idx_trn = idx_v[:-n_val]
-            idx_val = idx_v[-n_val:]
-
-            if sample_trn:
-                samples_v = samples_v[idx_trn]
-            else:
-                samples_v = samples_v[idx_val]
-
-            np.random.seed(self.random_seed)
-        
-        with h5py.File(os.path.join(self.ds_path, self.spec_cache_name),'r') as ds_h5py:
-            mfcc_v     = []
-            mel_dB_v   = []
-            power_dB_v = []
-
-            n_warning  = 0
-            
-            idxs_v = []
-            for i_epoch in range(n_epochs):
-                if randomize_samples:
-                    np.random.shuffle(samples_v)
-                
-                for i_sample in samples_v:
-                    spec_len = ds_h5py['mfcc'][i_sample].shape[0]
-                    
-                    if spec_len <= n_timesteps:
-                        # Padding
-                        i_s = 0
-                        i_e = n_timesteps
-                        
-                        mfcc     = ds_h5py["mfcc"][i_sample][:]
-                        mel_dB   = ds_h5py["mel_dB"][i_sample][:]
-                        power_dB = ds_h5py["power_dB"][i_sample][:]
-                        
-                        pad_len = n_timesteps - spec_len
-
-                        mfcc, mel_dB, power_dB = self._zero_pad(mfcc, mel_dB, power_dB, pad_len=pad_len)
-                        
-                        if n_warning < 5:
-                            print('WARNING: padding!!!'.format(i_sample))
-                            n_warning += 1
-
-                    else:
-                        # Solamente elegimos un frame por wav
-                        i_s = np.random.randint(0, spec_len-n_timesteps)
-                        i_e = i_s + n_timesteps
-                        
-                        mfcc     = ds_h5py["mfcc"][i_sample][i_s:i_e]
-                        mel_dB   = ds_h5py["mel_dB"][i_sample][i_s:i_e]
-                        power_dB = ds_h5py["power_dB"][i_sample][i_s:i_e]
-
-
-
-                    mfcc_v.append( mfcc )
-                    mel_dB_v.append( mel_dB )
-                    power_dB_v.append( power_dB )
-                    
-                    idxs_v.append([i_s, i_e, int(i_sample)])
-                        
-
-                    if len(mfcc_v) == batch_size:
-                        mfcc_v     = np.array(mfcc_v)
-                        mel_dB_v   = np.array(mel_dB_v)
-                        power_dB_v = np.array(power_dB_v)
-                        
-                        assert mfcc_v.shape[1] == mel_dB_v.shape[1] == power_dB_v.shape[1] == n_timesteps
-
-                        if yield_idxs:
-                            idxs_v = np.array(idxs_v)
-                            yield mfcc_v, mel_dB_v, power_dB_v, idxs_v
-                        else:
-                            yield mfcc_v, mel_dB_v, power_dB_v
-                            
-                        mfcc_v     = []
-                        mel_dB_v   = []
-                        power_dB_v = []
-                        idxs_v     = []
 
                         
         
@@ -611,7 +523,6 @@ class TIMIT(Sound_DS):
                             
 
  
-
     
     def calc_class_weights(self, clip=(0,10), ds_filter_d={'ds_type':'TRAIN'}):
         f_s = self.get_ds_filter(ds_filter_d)
@@ -643,7 +554,7 @@ class TIMIT(Sound_DS):
 # 6 119 737
 
 if __name__ == '__main__':
-    import time
+##    import time
     
     if os.name == 'nt':
         ds_path = r'G:\Downloads\timit'
@@ -687,13 +598,18 @@ if __name__ == '__main__':
     timit = TIMIT(ds_cfg_d)
 
 
-    ds_filter_d={'split_d':{'split_key':'spk_id', 'split_props_v':(0.8,0.9), 'split_type':'trn'},'ds_type':['TEST']}
+    ds_filter_d={'split_d':{'split_key':'spk_id', 'split_props_v':(0.8,0.9), 'split_type':'trn'},'spk_id':['RDD0', 'RDM0']}
     timit.get_ds_filter(ds_filter_d).sum()
 
+    r = next(iter(timit.speaker_spec_sampler(5, n_epochs=1, ds_filter_d=ds_filter_d)))
+    for mfcc, mel_dB, power_dB, class_oh in zip(*r):
+        print(class_oh)
+        timit.spec_show(mel_dB)
+        
     
-    r = next(iter(timit.spec_window_sampler(32,1, yield_idxs=True)))
-    for mfcc, mel, stft, idxs_v in zip(*r):
-        timit.spec_show(stft, idxs_v=idxs_v)
+##    r = next(iter(timit.spec_window_sampler(10,1, yield_idxs=True)))
+##    for mfcc, mel, stft, idxs_v in zip(*r):
+##        timit.spec_show(stft, idxs_v=idxs_v)
 
     
 ##    mfcc_batch, phn_v_batch, idxs_v_batch = next(iter(timit.window_sampler(50,1, yield_idxs=True)))

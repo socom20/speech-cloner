@@ -243,3 +243,102 @@ class Sound_DS():
 
 
     
+    def _zero_pad(self, *to_pad, pad_len=10):
+        ret_v = []
+        for spec in to_pad:
+            spec_padded = np.concatenate( [spec, np.zeros( (pad_len, spec.shape[1]) )], axis=0 )
+            
+            ret_v.append(spec_padded)
+
+        return ret_v
+    
+
+    def spec_window_sampler(self, batch_size=32, n_epochs=1, randomize_samples=True, sample_trn=True, prop_val=0.3, ds_filter_d={}, yield_idxs=False):
+        n_timesteps=self.n_timesteps 
+        f_s = self.get_ds_filter(ds_filter_d)
+        samples_v = np.arange(f_s.shape[0])[f_s]
+        samples_v = np.array( [str(i) for i in samples_v] )
+
+        if prop_val > 0.0:
+            np.random.seed(0)# Some seed
+            
+            idx_v = np.arange(samples_v.shape[0])
+            np.random.shuffle(idx_v)
+
+            n_val = int(prop_val*samples_v.shape[0])
+            idx_trn = idx_v[:-n_val]
+            idx_val = idx_v[-n_val:]
+
+            if sample_trn:
+                samples_v = samples_v[idx_trn]
+            else:
+                samples_v = samples_v[idx_val]
+
+            np.random.seed(self.random_seed)
+        
+        with h5py.File(os.path.join(self.ds_path, self.spec_cache_name),'r') as ds_h5py:
+            mfcc_v     = []
+            mel_dB_v   = []
+            power_dB_v = []
+
+            n_warning  = 0
+            
+            idxs_v = []
+            for i_epoch in range(n_epochs):
+                if randomize_samples:
+                    np.random.shuffle(samples_v)
+                
+                for i_sample in samples_v:
+                    spec_len = ds_h5py['mfcc'][i_sample].shape[0]
+                    
+                    if spec_len <= n_timesteps:
+                        # Padding
+                        i_s = 0
+                        i_e = n_timesteps
+                        
+                        mfcc     = ds_h5py["mfcc"][i_sample][:]
+                        mel_dB   = ds_h5py["mel_dB"][i_sample][:]
+                        power_dB = ds_h5py["power_dB"][i_sample][:]
+                        
+                        pad_len = n_timesteps - spec_len
+
+                        mfcc, mel_dB, power_dB = self._zero_pad(mfcc, mel_dB, power_dB, pad_len=pad_len)
+                        
+                        if n_warning < 5:
+                            print('WARNING: padding!!!'.format(i_sample))
+                            n_warning += 1
+
+                    else:
+                        # Solamente elegimos un frame por wav
+                        i_s = np.random.randint(0, spec_len-n_timesteps)
+                        i_e = i_s + n_timesteps
+                        
+                        mfcc     = ds_h5py["mfcc"][i_sample][i_s:i_e]
+                        mel_dB   = ds_h5py["mel_dB"][i_sample][i_s:i_e]
+                        power_dB = ds_h5py["power_dB"][i_sample][i_s:i_e]
+
+
+                    mfcc_v.append( mfcc )
+                    mel_dB_v.append( mel_dB )
+                    power_dB_v.append( power_dB )
+                    
+                    idxs_v.append([i_s, i_e, int(i_sample)])
+                        
+
+                    if len(mfcc_v) == batch_size:
+                        mfcc_v     = np.array(mfcc_v)
+                        mel_dB_v   = np.array(mel_dB_v)
+                        power_dB_v = np.array(power_dB_v)
+                        
+                        assert mfcc_v.shape[1] == mel_dB_v.shape[1] == power_dB_v.shape[1] == n_timesteps
+
+                        if yield_idxs:
+                            idxs_v = np.array(idxs_v)
+                            yield mfcc_v, mel_dB_v, power_dB_v, idxs_v
+                        else:
+                            yield mfcc_v, mel_dB_v, power_dB_v
+                            
+                        mfcc_v     = []
+                        mel_dB_v   = []
+                        power_dB_v = []
+                        idxs_v     = []
