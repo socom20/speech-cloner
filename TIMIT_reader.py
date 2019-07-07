@@ -225,14 +225,15 @@ class TIMIT(Sound_DS):
                         ret[i_q] = ret[i_rep]
                         break
                 else:
-                    for i_rep in range(i_q, ret_sum.axis[0], 1):
+                    for i_rep in range(i_q, ret_sum.shape[0], 1):
                         if ret_sum[i_rep] != 0:
                             ret[i_q] = ret[i_rep]
                             break
                     else:
                         raise Exception(' ERROR: Replace for phoneme "p" not found!!')
-
-        assert ret.sum() == phn61_v.shape[0], Exception(' ERROR: phoneme not indexed!!')
+        
+        ret = ret / ret.sum(axis=-1)[:,np.newaxis]
+        #assert ret.sum() == phn61_v.shape[0], Exception(' ERROR: phoneme not indexed!!')
         return ret
                 
 

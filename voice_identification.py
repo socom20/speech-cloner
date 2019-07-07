@@ -13,25 +13,33 @@ def create_model(input_shape=(400, 80), n_output=8):
 
     model.add( keras.layers.Conv2D(filters=32,  kernel_size=5, activation='relu' ) )
 
-    model.add( keras.layers.MaxPooling2D(pool_size=3) )
+    model.add( keras.layers.MaxPooling2D(pool_size=2) )
 
-    model.add( keras.layers.Conv2D(filters=32,  kernel_size=3, activation='relu' ) )
+    model.add( keras.layers.Conv2D(filters=64,  kernel_size=3, activation='relu' ) )
 
+    model.add( keras.layers.MaxPooling2D(pool_size=2) )
 
-    model.add( keras.layers.MaxPooling2D(pool_size=3) )
-
-    
     model.add( keras.layers.Flatten() )
-
+    
+    model.add( keras.layers.BatchNormalization() )
 
     model.add( keras.layers.Dense(128, activation='relu') )
+
+    model.add( keras.layers.Dense(512, activation='relu') )
+    
     model.add( keras.layers.Dense(n_output, activation='softmax') )
 
-
-    model.compile('adam', 'categorical_crossentropy', metrics=['categorical_accuracy'])
+    opt = keras.optimizers.Adam(lr=1e-4)
+    
+    model.compile(opt, 'categorical_crossentropy', metrics=['categorical_accuracy'])
 
     model.summary()
     return model
+
+
+
+
+
 
 
 
@@ -158,18 +166,18 @@ if __name__ == '__main__':
                'WRE0', 'WRP0', 'WSB0', 'WSH0', 'WVW0', 'ZMB0']
 
     
-    ds_filter_trn_d={'split_d':{'split_key':'spk_id', 'split_props_v':(0.6,0.8), 'split_type':'trn'},
+    ds_filter_trn_d={'split_d':{'split_key':'spk_id', 'split_props_v':(0.8,0.9), 'split_type':'trn'},
                      'spk_id':spk_id_v}
 
-    ds_filter_val_d={'split_d':{'split_key':'spk_id', 'split_props_v':(0.6,0.8), 'split_type':'val'},
+    ds_filter_val_d={'split_d':{'split_key':'spk_id', 'split_props_v':(0.8,0.9), 'split_type':'val'},
                      'spk_id':spk_id_v}
 
-    ds_filter_tst_d={'split_d':{'split_key':'spk_id', 'split_props_v':(0.6,0.8), 'split_type':'tst'},
+    ds_filter_tst_d={'split_d':{'split_key':'spk_id', 'split_props_v':(0.8,0.9), 'split_type':'tst'},
                      'spk_id':spk_id_v}
 
     
     timit.get_ds_filter(ds_filter_trn_d).sum()
-    model = create_model(input_shape=(400, 40), n_output=len(spk_id_v))
+    model = create_model(input_shape=(400, 201), n_output=len(spk_id_v))
 
 ##    r = next(iter(timit.speaker_spec_sampler(32, n_epochs=1, ds_filter_d=ds_filter_d)))
 ##    for mfcc, mel_dB, power_dB, class_oh in zip(*r):
@@ -181,20 +189,50 @@ if __name__ == '__main__':
     n_epochs = 1000
     batch_size = 32
 
-    val_flow = timit.speaker_spec_sampler(batch_size, n_epochs=n_epochs*1000, ds_filter_d=ds_filter_val_d)
+    val_flow = iter( timit.speaker_spec_sampler(batch_size, n_epochs=n_epochs, ds_filter_d=ds_filter_val_d) )
 
-    hist_trn = []
-    hist_val = []
+    trn_loss_v = []
+    trn_acc_v  = []
+    val_loss_v = []
+    val_acc_v  = []
+
+    best_val_acc = 0.0
+    
+    i_step = 0
     for mfcc_v, mel_dB_v, power_dB_v, class_oh_v in timit.speaker_spec_sampler(batch_size, n_epochs=n_epochs, ds_filter_d=ds_filter_trn_d):
-        hist_trn_d = model.fit(mfcc_v, class_oh_v,  batch_size=batch_size, epochs=1, verbose=False).history
+        hist_trn_d = model.fit(power_dB_v, class_oh_v,  batch_size=batch_size, epochs=1, verbose=False).history
 
         val_mfcc_v, val_mel_dB_v, val_power_dB_v, val_class_oh_v = next(val_flow)
-        hist_val_d = model.evaluate(val_mfcc_v, val_class_oh_v)
+        hist_val_v = model.evaluate(val_power_dB_v, val_class_oh_v, batch_size=512, verbose=False)
 
-        hist_trn.append(hist_trn_d)
-        hist_val.append(hist_val_d)
+        trn_loss_v.append(hist_trn_d['loss'][0])
+        trn_acc_v.append( hist_trn_d['categorical_accuracy'][0])
+        val_loss_v.append(hist_val_v[0])
+        val_acc_v.append( hist_val_v[1])
         
-        print(hist_trn_d, hist_val_d)
+        print(' - i_step={:4d}  -  trn_loss={:5.03f}  -  trn_acc={:5.03f}  -  val_loss={:5.03f}  -  val_acc={:5.03f}'.format(i_step,
+                                                                                                                             trn_loss_v[-1], trn_acc_v[-1],
+                                                                                                                             val_loss_v[-1], val_acc_v[-1]))
+
+        if len(val_acc_v) > 10 and np.mean(val_acc_v[-10]) > best_val_acc:
+            best_w = model.get_weights()
+            best_val_acc = np.mean(val_acc_v[-10])
+
+            print(best_val_acc, 'Salvando<<<<<<<<<<<<<<<<<<<<<')
+            
+        i_step += 1
+
+
+    if 1:
+        plt.plot(trn_acc_v, 'r-')
+        plt.plot(val_acc_v, 'b-')
+        plt.show()
+
+
+
+
+
+        
             
 
 

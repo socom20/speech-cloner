@@ -32,7 +32,7 @@ if __name__ == '__main__':
 
 
     print(' Cleaning:', folder_name)
-    print(' Keep at least:', n_saves, 'checkpoints.')
+    print(' This will keep:', n_saves, 'checkpoints. With global_step >', step_min)
 
     print('ENTER to continue ... ', end='')
     input()

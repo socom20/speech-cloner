@@ -1,5 +1,5 @@
 '''
-Modificado de la version de:
+Modificado a partir de la de:
 
 By kyubyong park. kbpark.linguist@gmail.com. 
 https://www.github.com/kyubyong/tacotron
@@ -325,33 +325,33 @@ def CBHG(inputs, embed_size=256, num_conv_banks=16, num_highwaynet_blocks=4, dro
 
     with tf.variable_scope(scope, reuse=reuse):
         ## Conv1D banks
-            enc = conv1d_banks(inputs, K=num_conv_banks, is_training=is_training) # (N, T_x, K*E/2)
-            
-            ## Max pooling
-            enc = tf.layers.max_pooling1d(enc, pool_size=2, strides=1, padding="same")  # (N, T_x, K*E/2)
-              
-            ## Conv1D projections
-            enc = conv1d(enc, filters=embed_size//2, size=3, scope="conv1d_1") # (N, T_x, E/2)
-            enc = bn(enc, is_training=is_training, activation_fn=tf.nn.relu, scope="conv1d_1")
+        enc = conv1d_banks(inputs, K=num_conv_banks, is_training=is_training) # (N, T_x, K*E/2)
+        
+        ## Max pooling
+        enc = tf.layers.max_pooling1d(enc, pool_size=2, strides=1, padding="same")  # (N, T_x, K*E/2)
+          
+        ## Conv1D projections
+        enc = conv1d(enc, filters=embed_size//2, size=3, scope="conv1d_1") # (N, T_x, E/2)
+        enc = bn(enc, is_training=is_training, activation_fn=tf.nn.relu, scope="conv1d_1")
 
-            enc = conv1d(enc, filters=embed_size // 2, size=3, scope="conv1d_2")  # (N, T_x, E/2)
-            enc = bn(enc, is_training=is_training, scope="conv1d_2")
+        enc = conv1d(enc, filters=embed_size//2, size=3, scope="conv1d_2") # (N, T_x, E/2)
+        enc = bn(enc, is_training=is_training, scope="conv1d_2")
 
-            enc += inputs # (N, T_x, E/2) # residual connections
-              
-            ## Highway Nets
-            for i in range(num_highwaynet_blocks):
-                enc = highwaynet(enc, num_units=embed_size//2, 
-                                     scope='highwaynet_{}'.format(i)) # (N, T_x, E/2)
-            
-            if use_lstm:
-                print('CBHG: using LSTM!!')
-                ## Bidirectional LSTM
-                output = lstm(enc, num_units=embed_size//2, bidirection=True, use_Cudnn=use_Cudnn) # (N, T_x, E)
-            else:
-                print('CBHG: using GRU!!')
-                ## Bidirectional GRU
-                output = gru(enc, num_units=embed_size//2, bidirection=True, use_Cudnn=use_Cudnn) # (N, T_x, E)
+        enc += inputs # (N, T_x, E/2) # residual connections
+          
+        ## Highway Nets
+        for i in range(num_highwaynet_blocks):
+            enc = highwaynet(enc, num_units=embed_size//2, 
+                                 scope='highwaynet_{}'.format(i)) # (N, T_x, E/2)
+        
+        if use_lstm:
+            print('CBHG: using LSTM!!')
+            ## Bidirectional LSTM
+            output = lstm(enc, num_units=embed_size//2, bidirection=True, use_Cudnn=use_Cudnn) # (N, T_x, E)
+        else:
+            print('CBHG: using GRU!!')
+            ## Bidirectional GRU
+            output = gru(enc, num_units=embed_size//2, bidirection=True, use_Cudnn=use_Cudnn) # (N, T_x, E)
 
     return output
 

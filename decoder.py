@@ -515,7 +515,7 @@ if __name__ == '__main__':
 ##        ds_path = r'G:\Downloads\TRG\L. Frank Baum/The Wonderful Wizard of Oz'
 ##    else:
 ##        ds_path = '/media/sergio/EVO970/UNIR/TFM/code/data_sets/TRG/L. Frank Baum/The Wonderful Wizard of Oz'
-
+##
 ##    target_ds_cfg_d = {'ds_path':ds_path,
 ##                       'sample_rate':timit_ds_cfg_d['sample_rate'],  #Frecuencia de muestreo los archivos de audio Hz
 ##                       'exclude_files_with':['Oz-01', 'Oz-25'],
@@ -547,8 +547,7 @@ if __name__ == '__main__':
 ##                       'mean_abs_amp_norm': timit_ds_cfg_d['mean_abs_amp_norm'],
 ##                       'clip_output':       timit_ds_cfg_d['clip_output']}
 
-
-
+    
     if os.name == 'nt':
         ds_path = r'G:\Downloads\ARCTIC\cmu_arctic'
     else:
@@ -556,11 +555,11 @@ if __name__ == '__main__':
 
     target_ds_cfg_d = {'ds_path':ds_path,
                        'ds_norm':(0.0, 1.0),
-                        'remake_samples_cache':False,
-                        'random_seed':None,
-                        'ds_cache_name':'arctic_cache.pickle',
-                        'spec_cache_name':'spec_cache.h5py',
-                        'verbose':True,
+                       'remake_samples_cache':False,
+                       'random_seed':None,
+                       'ds_cache_name':'arctic_cache.pickle',
+                       'spec_cache_name':'spec_cache.h5py',
+                       'verbose':True,
 
                        'sample_rate':timit_ds_cfg_d['sample_rate'],  #Frecuencia de muestreo los archivos de audio Hz
                        'pre_emphasis': timit_ds_cfg_d['pre_emphasis'],
@@ -597,13 +596,13 @@ if __name__ == '__main__':
                  'input_shape':(enc_cfg_d['input_shape'][0], enc_cfg_d['n_output']),
                  
                  'steps_v':[{'embed_size':256, # Para la prenet. Se puede aumentar la dimension. None (usa la cantidad n_mfcc)
-                             'num_conv_banks':8,
+                             'num_conv_banks':32,
                              'num_highwaynet_blocks':4,
                              'n_output':target_ds_cfg_d['n_mels']},
                             
-                            {'embed_size':256, # Para la prenet. Se puede aumentar la dimension. None (usa la cantidad n_mfcc)
-                             'num_conv_banks':16,
-                             'num_highwaynet_blocks':4,
+                            {'embed_size':512, # Para la prenet. Se puede aumentar la dimension. None (usa la cantidad n_mfcc)
+                             'num_conv_banks':32,
+                             'num_highwaynet_blocks':6,
                              'n_output': n_stft}],
                    
                   'dropout_rate':0.1,
@@ -624,7 +623,7 @@ if __name__ == '__main__':
                  'use_target_mel_step2':False,
                  'target_mel_step2_val':500,
                    
-                 'ds_prop_val':0.05,
+                 'ds_prop_val':0.02,
                  'randomize_samples':True,
                  'ds_filter_d':{'spk_id': 'slt'},
                    
@@ -654,7 +653,7 @@ if __name__ == '__main__':
     
     
     # Restauro entrenamiento pausado
-##    decoder.restore()
+    decoder.restore()
     
 ##    # -------- Asigno nuevo lr_decay, lr_start --------
 ##    decoder.run(tf.assign(decoder.learning_rate_start, dec_cfg_d['learning_rate']))

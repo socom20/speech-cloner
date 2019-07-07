@@ -1,5 +1,6 @@
 import os, sys
 import json
+import pickle
 
 
 def make_dir_path(path='./algo1/algo2', verbose=True):
@@ -83,6 +84,23 @@ def save_cfg_d(cfg_d={}, cfg_path_name='./ds_cfg_d.txt'):
     return None
 
 
+
+def load_obj(file_d = './file.net', verbose=True):
+    f = open(file_d, 'br')
+    n = pickle.load(f)
+    f.close()
+    if verbose:
+        print(' - Objeto', type(n), os.path.basename(file_d),'leído de disco.')
+    return n
+
+def dump_obj(n, file_d = './file.net', verbose=True):
+    f = open(file_d, 'bw')
+    pickle.dump(n, f)
+    f.close()
+    if verbose:
+        print(' - Objeto', type(n), os.path.basename(file_d), 'salvado en disco.')
+
+        
 
 if __name__ == '__main__':
     save_cfg_d({'a':88, 'b':6, 'c': 5, 'd':{'r':2, 'm':3}})

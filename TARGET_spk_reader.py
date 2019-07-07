@@ -68,12 +68,12 @@ class TARGET_spk(Sound_DS):
         if not os.path.exists(os.path.join(self.ds_path, self.spec_cache_name)):
             r = ''
             while not r in ['y', 'n']:
-                print(' - TIMIT, no se encontr´o el archivo de cache "{}", desea construirlo (y/n):'.format(self.spec_cache_name), end='')
+                print(' - TARGET_spk, no se encontro el archivo de cache "{}", desea construirlo (y/n):'.format(self.spec_cache_name), end='')
                 r = input()
             if r == 'y':
                 self.create_spec_cache()
             else:
-                print(' - TIMIT, no se puede continuar sin generar el archivo de cache.', file=sys.stderr)
+                print(' - TARGET_spk, no se puede continuar sin generar el archivo de cache.', file=sys.stderr)
                 return None
 
         return None

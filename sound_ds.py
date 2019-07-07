@@ -129,8 +129,14 @@ class Sound_DS():
                 
 
         """
-        ds_filter_d = copy.deepcopy(ds_filter_d)
 
+        f = np.ones(self.ds['wav'].shape[0], dtype=np.bool)
+
+        if ds_filter_d is None:
+            return f
+
+        
+        ds_filter_d = copy.deepcopy(ds_filter_d)
         
         if 'split_d' in ds_filter_d.keys():
             split_d = ds_filter_d['split_d']
@@ -139,7 +145,7 @@ class Sound_DS():
             split_d = None
 
             
-        f = np.ones(self.ds['wav'].shape[0], dtype=np.bool)
+        
 
         for c, v in ds_filter_d.items():
             if c not in self.ds.keys():
@@ -208,7 +214,7 @@ class Sound_DS():
     def get_n_windows(self, prop_val=0.3, ds_filter_d={}):
         f_s = self.get_ds_filter(ds_filter_d)
         
-        n_windows     = sum([self.ds['wav'][i].shape[0] // (self.cfg_d['hop_length'] * self.cfg_d['n_timesteps']) for i in range(self.ds['wav'][f_s].shape[0])])
+        n_windows     = sum([ s.shape[0] // (self.cfg_d['hop_length'] * self.cfg_d['n_timesteps']) for s in self.ds['wav'][f_s]])
         n_windows_trn = int((1-prop_val)*n_windows)
         n_windows_val = n_windows - n_windows_trn
         

@@ -3,3 +3,5 @@ __*
 dec_ckpt
 *.txt
 test_*
+models_voice_id*
+
