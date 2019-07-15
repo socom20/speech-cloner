@@ -73,36 +73,25 @@ class decoder_specs:
 
         
     def _build_model(self, reuse=None):
-        '''
-        Args:
-          inputs: A 2d tensor with shape of [N, T_x, E], with dtype of int32. Encoder inputs.
-          is_training: Whether or not the layer is in training mode.
-          scope: Optional scope for `variable_scope`
-          reuse: Boolean, whether to reuse the weights of a previous layer
-            by the same name.
-        
-        Returns:
-          A collection of Hidden vectors. So-called memory. Has the shape of (N, T_x, E).
-        '''
 
 
         with tf.variable_scope(self.cfg_d['model_name'], reuse=reuse):
             if self.encoder is None:
                 self.inputs = tf.placeholder(tf.float32, (None,)+tuple(self.cfg_d['input_shape']), name='inputs')
-                dec_inputs  = self.inputs
+                self.dec_inputs  = self.inputs
             else:
                 self.inputs = self.encoder.get_input()
                 
-                enc_o      = self.encoder.get_outputs()
-                dec_inputs = enc_o.y_pred  # Usamos softmax(y_pred) que tiene menos informacion del hablante.
+                enc_o           = self.encoder.get_outputs()
+                self.dec_inputs = enc_o.y_pred  # Usamos softmax(y_logits) que tiene menos informacion del hablante.
 
                 assert self.encoder.y_logits.shape.as_list()[1:] == list(self.cfg_d['input_shape']), 'ERROR, input_shape no coincide con la dimensión de salida del encoder.'
 
                 
             # Solamente recuperamos el maximo
             if False:
-                dec_inputs_oh = tf.one_hot( indices=tf.argmax(dec_inputs, axis=-1), depth=dec_inputs.shape[-1].value, axis=-1, name='dec_inputs_oh')
-                dec_inputs    = dec_inputs_oh
+                dec_inputs_oh   = tf.one_hot( indices=tf.argmax(self.dec_inputs, axis=-1), depth=self.dec_inputs.shape[-1].value, axis=-1, name='dec_inputs_oh')
+                self.dec_inputs = dec_inputs_oh
 
                     
             with tf.variable_scope('step1', reuse=reuse): # self.cfg_d['steps_v'][0]['']  self.cfg_d['']
@@ -114,7 +103,7 @@ class decoder_specs:
                     embed_size = step_d['embed_size']
 
                 # Encoder pre-net
-                prenet_out = prenet(inputs=dec_inputs,
+                prenet_out = prenet(inputs=self.dec_inputs,
                                     num_units=None,
                                     embed_size=embed_size,
                                     dropout_rate=self.cfg_d['dropout_rate'],
@@ -150,7 +139,7 @@ class decoder_specs:
 
                     
                 if False:
-                    inputs_step2 = tf.concat([CBHG_out, dec_inputs], axis=-1)
+                    inputs_step2 = tf.concat([CBHG_out, self.dec_inputs], axis=-1)
                     inputs_step2 = CBHG_out
                     inputs_step2 = self.y_mel
                 else:
@@ -458,18 +447,21 @@ class decoder_specs:
     def predict(self, x, batch_size=32):
         y_mel_v  = []
         y_stft_v = []
+        y_phn_v  = []
         
         for i_s in range(0, x.shape[0], batch_size):
             x_batch = x[i_s:min(i_s+batch_size, x.shape[0])]
-            y_mel, y_stft = self.sess.run([self.y_mel, self.y_stft], {self.inputs:x_batch} )
+            y_mel, y_stft, y_phn = self.sess.run([self.y_mel, self.y_stft, self.dec_inputs], {self.inputs:x_batch} )
             
             y_mel_v.append(y_mel)
             y_stft_v.append(y_stft)
+            y_phn_v.append(y_phn)
 
-        predict_nt = namedtuple('predict', 'y_mel y_stft')
+        predict_nt = namedtuple('predict', 'y_mel y_stft y_phn')
         
         ret_nt = predict_nt(np.concatenate(y_mel_v, axis=0),
-                            np.concatenate(y_stft_v, axis=0))
+                            np.concatenate(y_stft_v, axis=0),
+                            np.concatenate(y_phn_v, axis=0),)
         return ret_nt
 
 

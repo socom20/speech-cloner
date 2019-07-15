@@ -84,7 +84,7 @@ def compound(y0, y1):
     return y
     
 
-def translate2(decoder, mfcc, mel, stft, cfg_d, t_s=5, t_e=60, n_iter=200, output_path='./output', file_name='y_wav', realse=1.0, save_output=False, giffin_lim_input=True):
+def conversion2(decoder, mfcc, mel, stft, cfg_d, t_s=5, t_e=60, n_iter=200, output_path='./output', file_name='y_wav', realse=1.0, save_output=False, giffin_lim_input=True, play_conversion=False):
 
     hop     = cfg_d['hop_length']
     n_times = cfg_d['n_timesteps']
@@ -129,16 +129,17 @@ def translate2(decoder, mfcc, mel, stft, cfg_d, t_s=5, t_e=60, n_iter=200, outpu
 
         mel_pred  = compound(y_pred0.y_mel,  y_pred1.y_mel)
         stft_pred = compound(y_pred0.y_stft, y_pred1.y_stft)
+        phn_pred  = compound(y_pred0.y_phn, y_pred1.y_phn)
 
     else:
         y_pred = y_pred0
         mel_pred  = y_pred.y_mel.reshape( (-1, y_pred.y_mel.shape[-1]) )
         stft_pred = y_pred.y_stft.reshape( (-1, y_pred.y_stft.shape[-1]) )
-
+        phn_pred =  y_pred.y_phn.reshape( (-1, y_pred.y_phn.shape[-1]) )
     
         
 
-    mel_true = mel[n_s:n_e]
+    mel_true  = mel[n_s:n_e]
     stft_true = stft[n_s:n_e]
     
     show_spec_comp(mel_true, mel_pred, stft_true, stft_pred, True)
@@ -177,19 +178,32 @@ def translate2(decoder, mfcc, mel, stft, cfg_d, t_s=5, t_e=60, n_iter=200, outpu
         
         librosa.output.write_wav(output_path+'/{}_pred.wav'.format(file_name), y_wav_pred, cfg_d['sample_rate'], norm=True)
 
-    if giffin_lim_input:
-        input('ENTER for play y_wav_true: ')
-        sd.play(y_wav_true, cfg_d['sample_rate'], blocking=True)
+
+    if play_conversion:
+        if giffin_lim_input:
+            input('ENTER for play y_wav_true: ')
+            sd.play(y_wav_true, cfg_d['sample_rate'], blocking=True)
+        
+        input('ENTER for play y_wav_pred: ')
+        sd.play(y_wav_pred, cfg_d['sample_rate'], blocking=True)
     
-    input('ENTER for play y_wav_pred: ')
-    sd.play(y_wav_pred, cfg_d['sample_rate'], blocking=True)
+    ret_tuple = namedtuple('conversion', ' '.join(['y_wav_true',
+                                                   'y_wav_pred',
+                                                   'mel_true',
+                                                   'mel_pred',
+                                                   'stft_true',
+                                                   'stft_pred',
+                                                   'phn_pred'] ))
+
     
-    return y_wav_true, y_wav_pred
+    ret_conversion = ret_tuple(y_wav_true, y_wav_pred, mel_true, mel_pred, stft_true, stft_pred, phn_pred)
+    
+    return ret_conversion
 
 
 
 
-def translate(decoder, mfcc, mel, stft, cfg_d, t_s=5, t_e=60, n_iter=200, output_path='./output', file_name='y_wav', realse=1.0, save_output=False, giffin_lim_input=True):
+def conversion(decoder, mfcc, mel, stft, cfg_d, t_s=5, t_e=60, n_iter=200, output_path='./output', file_name='y_wav', realse=1.0, save_output=False, giffin_lim_input=True, play_conversion=False):
 
     hop     = cfg_d['hop_length']
     n_times = cfg_d['n_timesteps']
@@ -271,16 +285,25 @@ def translate(decoder, mfcc, mel, stft, cfg_d, t_s=5, t_e=60, n_iter=200, output
         
         librosa.output.write_wav(output_path+'/{}_pred.wav'.format(file_name), y_wav_pred, cfg_d['sample_rate'], norm=True)
 
-    if giffin_lim_input:
-        input('ENTER for play y_wav_true: ')
-        sd.play(y_wav_true, cfg_d['sample_rate'], blocking=True)
+    if play_conversion:
+        if giffin_lim_input:
+            input('ENTER for play y_wav_true: ')
+            sd.play(y_wav_true, cfg_d['sample_rate'], blocking=True)
+        
+        input('ENTER for play y_wav_pred: ')
+        sd.play(y_wav_pred, cfg_d['sample_rate'], blocking=True)
     
-    input('ENTER for play y_wav_pred: ')
-    sd.play(y_wav_pred, cfg_d['sample_rate'], blocking=True)
+    ret_tuple = namedtuple('conversion', ' '.join(['y_wav_true',
+                                                   'y_wav_pred',
+                                                   'mel_true',
+                                                   'mel_pred',
+                                                   'stft_true',
+                                                   'stft_pred'] ))
+
     
-    return y_wav_true, y_wav_pred
-
-
+    ret_conversion = ret_tuple(y_wav_true, y_wav_pred, mel_true, mel_pred, stft_true, stft_pred)
+    
+    return ret_conversion
 
     
 if __name__ == '__main__':
@@ -405,12 +428,16 @@ if __name__ == '__main__':
 ##        wav_path = '/media/sergio/EVO970/UNIR/TFM/code/data_sets/ARCTIC/cmu_arctic/cmu_us_rms_arctic/wav/arctic_{}.wav'.format(sent)
 ##        wav_path = '/media/sergio/EVO970/UNIR/TFM/code/data_sets/ARCTIC/cmu_arctic/cmu_us_ksp_arctic/wav/arctic_{}.wav'.format(sent)
 ##        wav_path = '/media/sergio/EVO970/UNIR/TFM/code/data_sets/ARCTIC/cmu_arctic/cmu_us_jmk_arctic/wav/arctic_{}.wav'.format(sent)
-        wav_path = '/media/sergio/EVO970/UNIR/TFM/code/data_sets/ARCTIC/cmu_arctic/cmu_us_clb_arctic/wav/arctic_{}.wav'.format(sent)
+##        wav_path = '/media/sergio/EVO970/UNIR/TFM/code/data_sets/ARCTIC/cmu_arctic/cmu_us_clb_arctic/wav/arctic_{}.wav'.format(sent)
 ##        wav_path = '/media/sergio/EVO970/UNIR/TFM/code/data_sets/ARCTIC/cmu_arctic/cmu_us_bdl_arctic/wav/arctic_{}.wav'.format(sent)  # Target
 
 ##        wav_path = '../sergio.ogg'
+##        wav_path = '../jim.ogg'
 
 ##        wav_path = '/media/sergio/EVO970/UNIR/TFM/dataset/Audiobooks/wizard of OZ/08 The Deadly Poppy Field.mp3'
+##        wav_path = '/media/sergio/EVO970/UNIR/TFM/dataset/Audiobooks/wizard of OZ/13 The Rescue.mp3'
+
+        wav_path = '/media/sergio/EVO970/UNIR/TFM/dataset/Audiobooks/wizard of OZ/16 The Magic Art of the Great Humbug.mp3'
         
 ##        wav_path = '/media/sergio/EVO970/UNIR/TFM/code/data_sets/TRG/L. Frank Baum/The Wonderful Wizard of Oz/The Wonderful Wizard of Oz-04 Chapter 4.mp3'
         
@@ -461,16 +488,18 @@ if __name__ == '__main__':
                                            mean_abs_amp_norm=wav_cfg_d['mean_abs_amp_norm'],
                                            clip_output=wav_cfg_d['clip_output'])
         
-        y_wav_true, y_wav_pred = translate2(decoder,
-                                           mfcc,
-                                           mel,
-                                           stft,
-                                           wav_cfg_d,
-                                           t_s=0, t_e=52,
-                                           output_path='./test_4', file_name='{}'.format(os.path.split(wav_path)[1].split('.')[0]),
-                                           save_output=True,
-                                           realse=1.2,
-                                           giffin_lim_input=True)
+        ret_conversion = conversion2(decoder,
+                                     mfcc,
+                                     mel,
+                                     stft,
+                                     wav_cfg_d,
+                                     t_s=0, t_e=60,
+                                     n_iter=200,
+                                     output_path='./test_4', file_name='{}'.format(os.path.split(wav_path)[1].split('.')[0]),
+                                     save_output=True,
+                                     realse=1.2,
+                                     giffin_lim_input=True,
+                                     play_conversion=False)
 
 
 
